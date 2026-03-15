@@ -16,6 +16,9 @@ public:
     const char* currentFile() const { return _filename; }
     uint32_t    frameCount()  const { return _frameCount; }
 
+    // Vaste header grootte: frames beginnen op byte 248
+    static const uint32_t HEADER_SIZE = 248;
+
 private:
     File     _file;
     char     _filename[64];
@@ -24,17 +27,15 @@ private:
     uint32_t _moviSize   = 0;
     uint32_t _startMs    = 0;
 
-    // AVI index op de heap om stack-overflow te voorkomen
-    // Elke entry: 4 bytes offset + 4 bytes size = 8 bytes
-    // 600 entries = max 60s @ 10fps
     static const uint32_t MAX_INDEX = 600;
     struct AviIdx { uint32_t offset; uint32_t size; };
     AviIdx* _index = nullptr;
 
-    // Hulpfuncties AVI schrijven
     void writeU32LE(uint32_t v);
     void writeU16LE(uint16_t v);
     void writeFourCC(const char* cc);
-    void writeAviHeader(uint32_t width, uint32_t height);
-    void patchU32(uint32_t fileOffset, uint32_t value);
+
+    // Bouwt een complete 248-byte AVI header in buf
+    void buildAviHeader(uint8_t* buf, uint32_t w, uint32_t h,
+                        uint32_t totalFrames, uint32_t moviDataSize);
 };

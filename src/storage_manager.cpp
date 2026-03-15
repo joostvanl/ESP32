@@ -85,7 +85,12 @@ std::vector<VideoFile> StorageManager::listVideos() {
     File f = dir.openNextFile();
     while (f) {
         if (!f.isDirectory()) {
-            String fname = String(f.name());
+            String fullPath = String(f.name());
+            // f.name() geeft op ESP32 SD_MMC het volledige pad terug (/videos/naam.avi)
+            // Haal alleen de bestandsnaam op (na de laatste '/')
+            int slash = fullPath.lastIndexOf('/');
+            String fname = (slash >= 0) ? fullPath.substring(slash + 1) : fullPath;
+
             if (fname.endsWith(".avi") || fname.endsWith(".AVI")) {
                 VideoFile vf;
                 vf.name    = fname;

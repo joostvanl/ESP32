@@ -78,20 +78,22 @@ void setup() {
     Serial.println("\n=== NestboxCam opstarten ===");
 #endif
 
-    // Camera initialiseren (eerst, vóór SD want SD_MMC deelt GPIO met flash LED)
-    if (!camera.begin()) {
-#if DEBUG_SERIAL
-        Serial.println("[Main] FOUT: Camera niet beschikbaar – systeem loopt door");
-#endif
-    }
-
-    // SD-kaart
+    // SD-kaart EERST initialiseren (vóór camera)
+    // AI Thinker ESP32-CAM: GPIO 4 = flash LED én SD_MMC HS2_DATA1
+    // Camera-init claimt GPIO 4 als output; SD moet dus voor camera starten
     if (!storage.begin()) {
 #if DEBUG_SERIAL
         Serial.println("[Main] FOUT: SD-kaart niet beschikbaar – herstart over 10s");
 #endif
         delay(10000);
         ESP.restart();
+    }
+
+    // Camera initialiseren NA SD
+    if (!camera.begin()) {
+#if DEBUG_SERIAL
+        Serial.println("[Main] FOUT: Camera niet beschikbaar – systeem loopt door");
+#endif
     }
 
     // WiFi
@@ -134,7 +136,6 @@ void loop() {
         }
 
         case State::RECORDING: {
-            // Frame opnemen
             unsigned long now = millis();
 
             // Opname tijdslimiet
@@ -143,15 +144,18 @@ void loop() {
                 break;
             }
 
-            // Live stream voorkomt opname (mutex via isStreaming flag)
+            // Live stream voorkomt opname
             if (webServer.isStreaming) {
                 stopRecording();
                 break;
             }
 
-            // Frame timing
-            static unsigned long lastFrameMs = 0;
+            // Frame timing – NIET static: reset bij elke opname via recStartMs vergelijking
             const unsigned long frameInterval = 1000 / CAM_FPS_TARGET;
+            static unsigned long lastFrameMs = 0;
+
+            // Reset lastFrameMs bij start van een nieuwe opname
+            if (lastFrameMs < recStartMs) lastFrameMs = recStartMs;
 
             if (now - lastFrameMs >= frameInterval) {
                 lastFrameMs = now;

@@ -1,5 +1,6 @@
 #include "web_server.h"
 #include "web_pages.h"
+#include "video_recorder.h"
 #include <SD_MMC.h>
 #include <Arduino.h>
 #include <vector>
@@ -198,7 +199,8 @@ bool WebServerManager::extractFirstJpeg(const String& aviPath, std::vector<uint8
     if (!f || f.size() < 260) return false;
 
     // Scan maximaal 8 KB om het eerste "00dc" chunk te vinden.
-    // Frames beginnen op offset 248 (na de 248-byte header).
+    // Frames beginnen op offset 248 (VideoRecorder::HEADER_SIZE).
+    const size_t FRAME_START = VideoRecorder::HEADER_SIZE;
     const size_t SCAN = 8192;
     uint8_t* buf = (uint8_t*)malloc(SCAN);
     if (!buf) { f.close(); return false; }
@@ -207,7 +209,7 @@ bool WebServerManager::extractFirstJpeg(const String& aviPath, std::vector<uint8
     f.close();
 
     bool found = false;
-    for (size_t i = 248; i + 8 <= rd; i++) {
+    for (size_t i = FRAME_START; i + 8 <= rd; i++) {
         if (buf[i]=='0' && buf[i+1]=='0' && buf[i+2]=='d' && buf[i+3]=='c') {
             uint32_t len = (uint32_t)buf[i+4]
                          | ((uint32_t)buf[i+5] << 8)

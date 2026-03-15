@@ -13,131 +13,108 @@ VideoRecorder::~VideoRecorder() {
 
 // ─── Schrijfhelpers ───────────────────────────────────────────────────────────
 
+static void writeU32LE_buf(uint8_t* p, uint32_t v) {
+    p[0] = v & 0xFF; p[1] = (v>>8)&0xFF; p[2] = (v>>16)&0xFF; p[3] = (v>>24)&0xFF;
+}
+static void writeU16LE_buf(uint8_t* p, uint16_t v) {
+    p[0] = v & 0xFF; p[1] = (v>>8)&0xFF;
+}
+
 void VideoRecorder::writeU32LE(uint32_t v) {
-    uint8_t b[4] = { (uint8_t)v, (uint8_t)(v>>8), (uint8_t)(v>>16), (uint8_t)(v>>24) };
-    _file.write(b, 4);
+    uint8_t b[4]; writeU32LE_buf(b, v); _file.write(b, 4);
 }
-
 void VideoRecorder::writeU16LE(uint16_t v) {
-    uint8_t b[2] = { (uint8_t)v, (uint8_t)(v>>8) };
-    _file.write(b, 2);
+    uint8_t b[2]; writeU16LE_buf(b, v); _file.write(b, 2);
 }
-
 void VideoRecorder::writeFourCC(const char* cc) {
     _file.write((const uint8_t*)cc, 4);
 }
 
-// Patch 4 bytes op een willekeurige positie in het bestand.
-// Slaat de huidige positie op en herstelt deze daarna.
-void VideoRecorder::patchU32(uint32_t fileOffset, uint32_t value) {
-    uint32_t saved = (uint32_t)_file.position();
-    _file.seek(fileOffset);
-    writeU32LE(value);
-    _file.seek(saved);
-}
+// ─── AVI header opbouwen in een 248-byte buffer ───────────────────────────────
+//
+// Vaste layout (248 bytes totaal):
+//   [  0] RIFF ????  AVI     12
+//   [ 12] LIST ????  hdrl    12
+//   [ 24]   avih(56)         64   → totalFrames @ [84]
+//   [ 88] LIST ????  strl    12
+//   [100]   strh(56)         64   → length @ [196]
+//   [164]   strf(40)         48
+//   [212] JUNK(28)           36   ← padding zodat movi op 248 valt
+//   [240] LIST ????  movi     8   → movi-size @ [244]
+//   [248] <frames starten hier>
+//
+void VideoRecorder::buildAviHeader(uint8_t* buf, uint32_t w, uint32_t h,
+                                    uint32_t totalFrames, uint32_t moviDataSize) {
+    memset(buf, 0, HEADER_SIZE);
+    uint32_t fps = CAM_FPS_TARGET;
+    uint32_t moviListSize = 4 + moviDataSize;   // "movi" + frames
+    uint32_t idxSize = 8 + totalFrames * 16;    // "idx1" + entries
+    uint32_t riffSize = HEADER_SIZE - 8         // alles na RIFF header
+                      + moviDataSize
+                      + idxSize;
 
-// ─── AVI header (vaste grootte 244 bytes) ────────────────────────────────────
-//
-// Byte-map (gebruikt voor patch-adressen):
-//   [4]   RIFF size
-//  [84]   avih.totalFrames
-// [136]   strh.length
-// [236]   LIST movi size
-//
-// Structuur:
-//   RIFF(AVI )                              12
-//     LIST(hdrl)                            12
-//       avih(56)                            64   → offset 12
-//       LIST(strl)                          12
-//         strh(56)                          64   → offset 104
-//         strf(40) BITMAPINFOHEADER         48   → offset 168
-//     JUNK(4)                               12   → offset 228 (padding tot 244)
-//     LIST(movi)                             8   → offset 240
-//       <frames starten op offset 248>
-//
-void VideoRecorder::writeAviHeader(uint32_t w, uint32_t h) {
-    // RIFF AVI
-    writeFourCC("RIFF");
-    writeU32LE(0);                        // [4]  patch later
-    writeFourCC("AVI ");
+    // RIFF
+    memcpy(buf+0,  "RIFF", 4); writeU32LE_buf(buf+4,  riffSize);
+    memcpy(buf+8,  "AVI ", 4);
 
     // LIST hdrl
-    writeFourCC("LIST");
-    writeU32LE(212);                      // hdrl list grootte (vast)
-    writeFourCC("hdrl");
+    memcpy(buf+12, "LIST", 4); writeU32LE_buf(buf+16, 212);
+    memcpy(buf+20, "hdrl", 4);
 
-    // avih  – offset 24
-    writeFourCC("avih");
-    writeU32LE(56);                       // chunk size
-    writeU32LE(1000000 / CAM_FPS_TARGET); // microSecPerFrame
-    writeU32LE(0);                        // maxBytesPerSec
-    writeU32LE(0);                        // paddingGranularity
-    writeU32LE(0x10);                     // flags AVIF_HASINDEX
-    writeU32LE(0);                        // [84] totalFrames  – patch later
-    writeU32LE(0);                        // initialFrames
-    writeU32LE(1);                        // streams
-    writeU32LE(w * h * 3);               // suggestedBufferSize
-    writeU32LE(w);                        // width
-    writeU32LE(h);                        // height
-    writeU32LE(0); writeU32LE(0);
-    writeU32LE(0); writeU32LE(0);
+    // avih
+    memcpy(buf+24, "avih", 4); writeU32LE_buf(buf+28, 56);
+    writeU32LE_buf(buf+32, 1000000 / fps);   // microSecPerFrame
+    writeU32LE_buf(buf+36, 0);               // maxBytesPerSec
+    writeU32LE_buf(buf+40, 0);               // paddingGranularity
+    writeU32LE_buf(buf+44, 0x10);            // AVIF_HASINDEX
+    writeU32LE_buf(buf+48, totalFrames);     // totalFrames
+    writeU32LE_buf(buf+52, 0);               // initialFrames
+    writeU32LE_buf(buf+56, 1);               // streams
+    writeU32LE_buf(buf+60, w*h*3);           // suggestedBufferSize
+    writeU32LE_buf(buf+64, w);
+    writeU32LE_buf(buf+68, h);
 
-    // LIST strl – offset 96
-    writeFourCC("LIST");
-    writeU32LE(132);
-    writeFourCC("strl");
+    // LIST strl
+    memcpy(buf+88,  "LIST", 4); writeU32LE_buf(buf+92,  132);
+    memcpy(buf+96,  "strl", 4);
 
-    // strh – offset 108
-    writeFourCC("strh");
-    writeU32LE(56);
-    writeFourCC("vids");
-    writeFourCC("MJPG");
-    writeU32LE(0);                        // flags
-    writeU16LE(0);                        // priority
-    writeU16LE(0);                        // language
-    writeU32LE(0);                        // initialFrames
-    writeU32LE(1);                        // scale
-    writeU32LE(CAM_FPS_TARGET);           // rate  (fps)
-    writeU32LE(0);                        // start
-    writeU32LE(0);                        // [136+8+56-4=196] length  – patch later
-    writeU32LE(w * h * 3);               // suggestedBufferSize
-    writeU32LE(0xFFFFFFFF);              // quality
-    writeU32LE(0);                        // sampleSize
-    writeU16LE(0); writeU16LE(0);
-    writeU16LE((uint16_t)w);
-    writeU16LE((uint16_t)h);
+    // strh
+    memcpy(buf+100, "strh", 4); writeU32LE_buf(buf+104, 56);
+    memcpy(buf+108, "vids", 4);
+    memcpy(buf+112, "MJPG", 4);
+    writeU32LE_buf(buf+116, 0);              // flags
+    writeU16LE_buf(buf+120, 0);              // priority
+    writeU16LE_buf(buf+122, 0);              // language
+    writeU32LE_buf(buf+124, 0);              // initialFrames
+    writeU32LE_buf(buf+128, 1);              // scale
+    writeU32LE_buf(buf+132, fps);            // rate
+    writeU32LE_buf(buf+136, 0);              // start
+    writeU32LE_buf(buf+140, totalFrames);    // length
+    writeU32LE_buf(buf+144, w*h*3);          // suggestedBufferSize
+    writeU32LE_buf(buf+148, 0xFFFFFFFF);     // quality
+    writeU32LE_buf(buf+152, 0);              // sampleSize
+    writeU16LE_buf(buf+160, (uint16_t)w);
+    writeU16LE_buf(buf+162, (uint16_t)h);
 
-    // strf (BITMAPINFOHEADER) – offset 172
-    writeFourCC("strf");
-    writeU32LE(40);
-    writeU32LE(40);                       // biSize
-    writeU32LE(w);
-    writeU32LE(h);
-    writeU16LE(1);                        // biPlanes
-    writeU16LE(24);                       // biBitCount
-    writeFourCC("MJPG");                  // biCompression
-    writeU32LE(w * h * 3);               // biSizeImage
-    writeU32LE(0); writeU32LE(0);
-    writeU32LE(0); writeU32LE(0);
+    // strf BITMAPINFOHEADER
+    memcpy(buf+164, "strf", 4); writeU32LE_buf(buf+168, 40);
+    writeU32LE_buf(buf+172, 40);             // biSize
+    writeU32LE_buf(buf+176, w);
+    writeU32LE_buf(buf+180, h);
+    writeU16LE_buf(buf+184, 1);              // biPlanes
+    writeU16LE_buf(buf+186, 24);             // biBitCount
+    memcpy(buf+188, "MJPG", 4);              // biCompression
+    writeU32LE_buf(buf+192, w*h*3);          // biSizeImage
 
-    // JUNK chunk – padding tot offset 240
-    // Huidige positie: 12+8+12+64+8+8+64+8+48 = 232 bytes
-    writeFourCC("JUNK");
-    writeU32LE(4);
-    writeU32LE(0);                        // 4 bytes payload → totaal 240
+    // JUNK padding: bytes 212..239
+    memcpy(buf+212, "JUNK", 4); writeU32LE_buf(buf+216, 20);
+    // 20 bytes payload (nullen) → JUNK chunk = 28 bytes totaal → positie 240
 
-    // LIST movi – offset 240
-    writeFourCC("LIST");
-    writeU32LE(0);                        // [244] movi data size – patch later
-    writeFourCC("movi");
-    // Frames beginnen op offset 248
+    // LIST movi
+    memcpy(buf+240, "LIST", 4); writeU32LE_buf(buf+244, moviListSize);
+    memcpy(buf+248-4, "movi", 4);  // offset 244: "movi" fourcc
+    // Frames starten op offset 248
 }
-
-// ─── Patch-offsets (berekend op basis van header layout hierboven) ────────────
-static const uint32_t OFF_RIFF_SIZE    =   4;
-static const uint32_t OFF_TOTAL_FRAMES =  84;
-static const uint32_t OFF_STRH_LENGTH  = 196;
-static const uint32_t OFF_MOVI_SIZE    = 244;
 
 // ─── Publieke interface ────────────────────────────────────────────────────────
 
@@ -158,17 +135,18 @@ bool VideoRecorder::begin(const char* filename) {
         return false;
     }
 
-    // Schrijf volledige header met echte dimensies direct.
-    // Framecount-velden worden later gepatcht via patchU32().
-    writeAviHeader(CAM_FRAME_WIDTH, CAM_FRAME_HEIGHT);
+    // Schrijf placeholder header (totalFrames=0, moviSize=0)
+    // Na finish() wordt het bestand opnieuw geopend en de header overschreven
+    uint8_t hdr[HEADER_SIZE];
+    buildAviHeader(hdr, CAM_FRAME_WIDTH, CAM_FRAME_HEIGHT, 0, 0);
+    size_t written = _file.write(hdr, HEADER_SIZE);
 
-    // Controleer dat we op offset 248 staan
-    if (_file.position() != 248) {
+    if (written != HEADER_SIZE || _file.position() != HEADER_SIZE) {
 #if DEBUG_SERIAL
-        Serial.printf("[Recorder] Header grootte fout: %u bytes (verwacht 248)\n",
-                      (uint32_t)_file.position());
+        Serial.printf("[Recorder] Header schrijven mislukt (geschreven: %u)\n", written);
 #endif
         _file.close();
+        SD_MMC.remove(filename);
         return false;
     }
 
@@ -183,15 +161,20 @@ bool VideoRecorder::writeFrame(const uint8_t* data, size_t len) {
     if (!_recording || !_file) return false;
     if (len == 0) return false;
 
-    // Offset relatief aan movi-begin (offset 248) min 4 bytes voor "movi" fourcc
-    // De idx1 offset is relatief aan het begin van de movi LIST data,
-    // dat is 4 bytes na de "LIST" size veld, dus offset 248 (na de "movi" fourcc).
-    // Conventie: offset is relatief aan start van de movi data (byte 248).
-    uint32_t frameOffset = (uint32_t)_file.position() - 248;
+    uint32_t frameOffset = (uint32_t)_file.position() - HEADER_SIZE;
 
     writeFourCC("00dc");
     writeU32LE((uint32_t)len);
-    _file.write(data, len);
+    size_t written = _file.write(data, len);
+
+    if (written != len) {
+#if DEBUG_SERIAL
+        Serial.printf("[Recorder] SD schrijven mislukt! (gevraagd=%u geschreven=%u)\n",
+                      len, written);
+#endif
+        return false;
+    }
+
     if (len & 1) {
         uint8_t pad = 0;
         _file.write(&pad, 1);
@@ -204,6 +187,12 @@ bool VideoRecorder::writeFrame(const uint8_t* data, size_t len) {
     _moviSize += 8 + (uint32_t)len + (len & 1);
     _frameCount++;
 
+#if DEBUG_SERIAL
+    if (_frameCount % 30 == 0) {
+        Serial.printf("[Recorder] %u frames, %u bytes movi\n", _frameCount, _moviSize);
+    }
+#endif
+
     return true;
 }
 
@@ -211,35 +200,43 @@ bool VideoRecorder::finish() {
     if (!_recording || !_file) return false;
     _recording = false;
 
-    // ── idx1 chunk schrijven ────────────────────────────────────────────────
+    // ── idx1 schrijven ──────────────────────────────────────────────────────
     uint32_t idxCount = (_frameCount < MAX_INDEX) ? _frameCount : MAX_INDEX;
     writeFourCC("idx1");
     writeU32LE(idxCount * 16);
     for (uint32_t i = 0; i < idxCount; i++) {
         writeFourCC("00dc");
-        writeU32LE(0x10);                  // AVIIF_KEYFRAME
+        writeU32LE(0x10);
         writeU32LE(_index[i].offset);
         writeU32LE(_index[i].size);
     }
 
-    // ── Header patchen ──────────────────────────────────────────────────────
-    uint32_t idxSize   = 8 + idxCount * 16;
-    uint32_t riffSize  = 248 - 8 + _moviSize + 8 + idxSize;
-    //                   ^248 = LIST hdrl + LIST movi header (240+8)
-    //                   subtract 8 for the RIFF header itself
-
-    patchU32(OFF_RIFF_SIZE,    riffSize);
-    patchU32(OFF_TOTAL_FRAMES, _frameCount);
-    patchU32(OFF_STRH_LENGTH,  _frameCount);
-    // movi LIST size = 4 (voor "movi" fourcc) + alle frame chunks
-    patchU32(OFF_MOVI_SIZE,    4 + _moviSize);
-
     _file.close();
+
+    // ── Header patchen door bestand opnieuw te openen ──────────────────────
+    // SD_MMC ondersteunt geen betrouwbare seek+write in open write-bestanden.
+    // Oplossing: open met r+ (FILE_WRITE opent voor append op ESP32,
+    // maar we kunnen het bestand opnieuw openen en de header overschrijven).
+    File patch = SD_MMC.open(_filename, FILE_WRITE);
+    if (patch) {
+        uint8_t hdr[HEADER_SIZE];
+        buildAviHeader(hdr, CAM_FRAME_WIDTH, CAM_FRAME_HEIGHT, _frameCount, _moviSize);
+        patch.write(hdr, HEADER_SIZE);
+        patch.close();
+#if DEBUG_SERIAL
+        Serial.printf("[Recorder] Header gepatcht: %u frames, %u bytes movi\n",
+                      _frameCount, _moviSize);
+#endif
+    } else {
+#if DEBUG_SERIAL
+        Serial.println("[Recorder] Header patchen mislukt (bestand niet te openen)");
+#endif
+    }
 
     uint32_t elapsed = (millis() - _startMs) / 1000;
 #if DEBUG_SERIAL
-    Serial.printf("[Recorder] Klaar: %u frames, %u sec, %u bytes movi → %s\n",
-                  _frameCount, elapsed, _moviSize, _filename);
+    Serial.printf("[Recorder] Klaar: %u frames in %u sec → %s\n",
+                  _frameCount, elapsed, _filename);
 #endif
     return true;
 }

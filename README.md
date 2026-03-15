@@ -36,7 +36,7 @@ GPIO 4       ──→   Anode (+) via 33Ω weerstand
 GND          ──→   Kathode (-)
 ```
 
-> **Let op:** De ingebouwde flash LED zit op GPIO 4. Gebruik `IR_LED_ENABLED = true` in `config.h` om deze in te schakelen tijdens opname.
+> **Let op:** De ingebouwde flash LED zit op GPIO 4. Gebruik `IR_LED_ENABLED true` in `config.h` om deze in te schakelen tijdens opname.
 
 ---
 
@@ -64,16 +64,39 @@ pio run --target upload
 
 ## Configuratie (`src/config.h`)
 
+Pas minimaal de WiFi-instellingen aan vóór het uploaden:
+
 ```cpp
 #define WIFI_SSID        "JouwSSID"
 #define WIFI_PASSWORD    "JouwWachtwoord"
 #define PIR_PIN          13      // GPIO van PIR sensor
-#define CAM_FRAME_SIZE   FRAMESIZE_VGA   // 640x480
-#define CAM_FPS_TARGET   10
 #define RECORD_DURATION_SEC  60  // seconden per opname
 #define IR_LED_ENABLED   false   // true = IR LED aan tijdens opname
 #define MIN_FREE_MB      50      // stop opname bij < 50 MB vrij
 ```
+
+### Resolutie instellen
+
+Wanneer je de resolutie wijzigt, moet je **beide** onderstaande defines tegelijk aanpassen:
+
+```cpp
+#define CAM_FRAME_SIZE   FRAMESIZE_VGA  // enum voor camera driver
+#define CAM_FRAME_WIDTH  640            // breedte in pixels
+#define CAM_FRAME_HEIGHT 480            // hoogte in pixels
+```
+
+> **Belangrijk:** `CAM_FRAME_WIDTH` en `CAM_FRAME_HEIGHT` worden gebruikt voor de AVI-header. Als ze niet overeenkomen met `CAM_FRAME_SIZE` wordt de video verkeerd opgeslagen.
+
+Beschikbare resoluties:
+
+| `CAM_FRAME_SIZE` | `CAM_FRAME_WIDTH` | `CAM_FRAME_HEIGHT` | Opmerking |
+|---|---|---|---|
+| `FRAMESIZE_QQVGA` | 160 | 120 | Minimaal RAM |
+| `FRAMESIZE_QVGA` | 320 | 240 | Weinig RAM |
+| `FRAMESIZE_CIF` | 400 | 296 | Fallback zonder PSRAM |
+| `FRAMESIZE_VGA` | 640 | 480 | **Standaard (aanbevolen)** |
+| `FRAMESIZE_SVGA` | 800 | 600 | Vereist PSRAM |
+| `FRAMESIZE_XGA` | 1024 | 768 | Vereist PSRAM |
 
 ---
 
@@ -138,13 +161,14 @@ IDLE ──[PIR trigger]──→ RECORDING
 
 ---
 
-## Aandachtspunten
+## Bekende beperkingen
 
 - **Live stream + opname tegelijk** is niet ondersteund vanwege RAM-beperkingen. De webserver toont een melding als je tijdens een opname naar `/live` gaat.
-- **PSRAM** (aanwezig op AI Thinker ESP32-CAM) wordt automatisch gebruikt voor hogere resolutie en meerdere frame buffers.
+- **PSRAM** (aanwezig op AI Thinker ESP32-CAM) wordt automatisch gebruikt voor hogere resolutie en meerdere frame buffers. Zonder PSRAM valt de camera terug op `FRAMESIZE_CIF`.
 - **PIR opwarmtijd**: De HC-SR501 heeft ~30 seconden nodig na inschakelen. Valse triggers worden in deze periode genegeerd.
 - **SD-kaart**: Gebruik een FAT32 geformatteerde kaart van maximaal 32 GB voor beste compatibiliteit.
 - **Partitie schema**: Gebruik `Huge APP` (geen OTA) om voldoende flash ruimte te hebben voor de firmware.
+- **Resolutie wijzigen**: Pas altijd zowel `CAM_FRAME_SIZE` als `CAM_FRAME_WIDTH`/`CAM_FRAME_HEIGHT` aan – anders bevat de AVI-header verkeerde dimensies.
 
 ---
 

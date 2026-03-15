@@ -28,9 +28,16 @@
 #define CAM_PIN_PCLK     22
 
 // Resolutie: FRAMESIZE_SVGA = 800x600, FRAMESIZE_VGA = 640x480
+// Kies één van: FRAMESIZE_QQVGA, FRAMESIZE_QVGA, FRAMESIZE_CIF,
+//               FRAMESIZE_VGA, FRAMESIZE_SVGA, FRAMESIZE_XGA
 #define CAM_FRAME_SIZE   FRAMESIZE_VGA
 #define CAM_QUALITY      12     // 0-63, lager = betere kwaliteit, meer RAM
 #define CAM_FPS_TARGET   10     // doelframe rate
+
+// Bijbehorende pixelafmetingen (moet overeenkomen met CAM_FRAME_SIZE)
+// Pas aan als je CAM_FRAME_SIZE wijzigt:
+#define CAM_FRAME_WIDTH  640
+#define CAM_FRAME_HEIGHT 480
 
 // ─── PIR sensor ──────────────────────────────────────────────────────────────
 #define PIR_PIN          13     // GPIO pin voor PIR sensor

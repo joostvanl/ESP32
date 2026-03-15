@@ -169,12 +169,7 @@ bool VideoRecorder::writeFrame(const uint8_t* data, size_t len) {
     // Dimensies zijn ingebed in JPEG; we gebruiken standaard VGA als default
     if (_frameCount == 0) {
         _file.seek(0);
-        // Gebruik geconfigureerde resolutie
-        uint32_t w = (CAM_FRAME_SIZE == FRAMESIZE_VGA) ? 640 :
-                     (CAM_FRAME_SIZE == FRAMESIZE_SVGA) ? 800 : 320;
-        uint32_t h = (CAM_FRAME_SIZE == FRAMESIZE_VGA) ? 480 :
-                     (CAM_FRAME_SIZE == FRAMESIZE_SVGA) ? 600 : 240;
-        writeAviHeader(w, h);
+        writeAviHeader(CAM_FRAME_WIDTH, CAM_FRAME_HEIGHT);
         _file.seek(0, SeekEnd);
     }
 

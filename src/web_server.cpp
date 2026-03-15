@@ -275,5 +275,8 @@ void WebServerManager::handleThumbnail() {
     }
 
     _server.sendHeader("Cache-Control", "max-age=300");
-    _server.send(200, "image/jpeg", (const char*)jpeg.data(), (size_t)jpeg.size());
+    _server.sendHeader("Content-Length", String(jpeg.size()));
+    _server.setContentLength(jpeg.size());
+    _server.send(200, "image/jpeg", "");
+    _server.client().write(jpeg.data(), jpeg.size());
 }

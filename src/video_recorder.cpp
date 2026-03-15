@@ -1,135 +1,143 @@
 #include "video_recorder.h"
 
-// ─── AVI hulpfuncties ─────────────────────────────────────────────────────────
+// ─── Constructor / destructor ─────────────────────────────────────────────────
 
-static void writeU32LE(File& f, uint32_t v) {
-    uint8_t b[4] = { (uint8_t)(v), (uint8_t)(v>>8), (uint8_t)(v>>16), (uint8_t)(v>>24) };
-    f.write(b, 4);
-}
-static void writeU16LE(File& f, uint16_t v) {
-    uint8_t b[2] = { (uint8_t)(v), (uint8_t)(v>>8) };
-    f.write(b, 2);
-}
-static void writeFourCC(File& f, const char* cc) {
-    f.write((const uint8_t*)cc, 4);
+VideoRecorder::VideoRecorder() {
+    _index = new AviIdx[MAX_INDEX];
 }
 
-// ─── AVI header schrijven (placeholder, wordt achteraf bijgewerkt) ────────────
-void VideoRecorder::writeAviHeader(uint32_t width, uint32_t height) {
-    _width  = width;
-    _height = height;
-
-    // RIFF AVI header – totaal 240 bytes (vaste grootte)
-    // Waarden die afhangen van frame count worden als 0 ingevuld
-    // en later bijgewerkt via finalizeAviHeader()
-
-    writeFourCC(_file, "RIFF");
-    writeU32LE(_file, 0);              // [4]  RIFF size – later bijwerken
-    writeFourCC(_file, "AVI ");
-
-    // ── LIST hdrl ────────────────────────────────────────────────────────────
-    writeFourCC(_file, "LIST");
-    writeU32LE(_file, 192);            // hdrl list size (vast)
-    writeFourCC(_file, "hdrl");
-
-    // avih
-    writeFourCC(_file, "avih");
-    writeU32LE(_file, 56);
-    writeU32LE(_file, 1000000 / CAM_FPS_TARGET); // microSecPerFrame
-    writeU32LE(_file, 0);              // maxBytesPerSec
-    writeU32LE(_file, 0);              // paddingGranularity
-    writeU32LE(_file, 0x10);           // flags: AVIF_HASINDEX
-    writeU32LE(_file, 0);              // [84] totalFrames – later bijwerken
-    writeU32LE(_file, 0);              // initialFrames
-    writeU32LE(_file, 1);              // streams
-    writeU32LE(_file, 0);              // suggestedBufferSize
-    writeU32LE(_file, width);
-    writeU32LE(_file, height);
-    writeU32LE(_file, 0); writeU32LE(_file, 0);
-    writeU32LE(_file, 0); writeU32LE(_file, 0);
-
-    // LIST strl
-    writeFourCC(_file, "LIST");
-    writeU32LE(_file, 116);
-    writeFourCC(_file, "strl");
-
-    // strh
-    writeFourCC(_file, "strh");
-    writeU32LE(_file, 56);
-    writeFourCC(_file, "vids");
-    writeFourCC(_file, "MJPG");
-    writeU32LE(_file, 0);              // flags
-    writeU16LE(_file, 0);              // priority
-    writeU16LE(_file, 0);              // language
-    writeU32LE(_file, 0);              // initialFrames
-    writeU32LE(_file, 1);              // scale
-    writeU32LE(_file, CAM_FPS_TARGET); // rate
-    writeU32LE(_file, 0);              // start
-    writeU32LE(_file, 0);             // [204] length – later bijwerken
-    writeU32LE(_file, 0);              // suggestedBufferSize
-    writeU32LE(_file, 0);              // quality
-    writeU32LE(_file, 0);              // sampleSize
-    writeU16LE(_file, 0); writeU16LE(_file, 0);
-    writeU16LE(_file, (uint16_t)width);
-    writeU16LE(_file, (uint16_t)height);
-
-    // strf (BITMAPINFOHEADER)
-    writeFourCC(_file, "strf");
-    writeU32LE(_file, 40);
-    writeU32LE(_file, 40);
-    writeU32LE(_file, width);
-    writeU32LE(_file, height);
-    writeU16LE(_file, 1);              // planes
-    writeU16LE(_file, 24);             // bitCount
-    writeFourCC(_file, "MJPG");
-    writeU32LE(_file, width * height * 3);
-    writeU32LE(_file, 0); writeU32LE(_file, 0);
-    writeU32LE(_file, 0); writeU32LE(_file, 0);
-
-    // Junk chunk om movi op offset 240 te starten
-    writeFourCC(_file, "JUNK");
-    writeU32LE(_file, 4);
-    writeU32LE(_file, 0);
-
-    // LIST movi
-    writeFourCC(_file, "LIST");
-    writeU32LE(_file, 0);              // [236] movi size – later bijwerken
-    writeFourCC(_file, "movi");
-
-    _dataStart = 240; // movi data begint na header
+VideoRecorder::~VideoRecorder() {
+    if (_recording) finish();
+    delete[] _index;
 }
 
-void VideoRecorder::finalizeAviHeader() {
-    uint32_t moviListSize = _moviSize + 4; // +4 voor "movi" fourcc
+// ─── Schrijfhelpers ───────────────────────────────────────────────────────────
 
-    // RIFF chunk grootte
-    _file.seek(4);
-    writeU32LE(_file, 240 - 8 + moviListSize + 8 + _frameCount * 16); // approx
-
-    // totalFrames in avih
-    _file.seek(84);
-    writeU32LE(_file, _frameCount);
-
-    // length in strh
-    _file.seek(204);
-    writeU32LE(_file, _frameCount);
-
-    // movi LIST grootte
-    _file.seek(236);
-    writeU32LE(_file, moviListSize);
+void VideoRecorder::writeU32LE(uint32_t v) {
+    uint8_t b[4] = { (uint8_t)v, (uint8_t)(v>>8), (uint8_t)(v>>16), (uint8_t)(v>>24) };
+    _file.write(b, 4);
 }
 
-void VideoRecorder::writeIndex() {
-    writeFourCC(_file, "idx1");
-    writeU32LE(_file, _frameCount * 16);
-
-    for (uint32_t i = 0; i < _frameCount && i < MAX_INDEX; i++) {
-        writeFourCC(_file, "00dc");
-        writeU32LE(_file, 0x10);       // AVIIF_KEYFRAME
-        writeU32LE(_file, _index[i].offset);
-        writeU32LE(_file, _index[i].size);
-    }
+void VideoRecorder::writeU16LE(uint16_t v) {
+    uint8_t b[2] = { (uint8_t)v, (uint8_t)(v>>8) };
+    _file.write(b, 2);
 }
+
+void VideoRecorder::writeFourCC(const char* cc) {
+    _file.write((const uint8_t*)cc, 4);
+}
+
+// Patch 4 bytes op een willekeurige positie in het bestand.
+// Slaat de huidige positie op en herstelt deze daarna.
+void VideoRecorder::patchU32(uint32_t fileOffset, uint32_t value) {
+    uint32_t saved = (uint32_t)_file.position();
+    _file.seek(fileOffset);
+    writeU32LE(value);
+    _file.seek(saved);
+}
+
+// ─── AVI header (vaste grootte 244 bytes) ────────────────────────────────────
+//
+// Byte-map (gebruikt voor patch-adressen):
+//   [4]   RIFF size
+//  [84]   avih.totalFrames
+// [136]   strh.length
+// [236]   LIST movi size
+//
+// Structuur:
+//   RIFF(AVI )                              12
+//     LIST(hdrl)                            12
+//       avih(56)                            64   → offset 12
+//       LIST(strl)                          12
+//         strh(56)                          64   → offset 104
+//         strf(40) BITMAPINFOHEADER         48   → offset 168
+//     JUNK(4)                               12   → offset 228 (padding tot 244)
+//     LIST(movi)                             8   → offset 240
+//       <frames starten op offset 248>
+//
+void VideoRecorder::writeAviHeader(uint32_t w, uint32_t h) {
+    // RIFF AVI
+    writeFourCC("RIFF");
+    writeU32LE(0);                        // [4]  patch later
+    writeFourCC("AVI ");
+
+    // LIST hdrl
+    writeFourCC("LIST");
+    writeU32LE(212);                      // hdrl list grootte (vast)
+    writeFourCC("hdrl");
+
+    // avih  – offset 24
+    writeFourCC("avih");
+    writeU32LE(56);                       // chunk size
+    writeU32LE(1000000 / CAM_FPS_TARGET); // microSecPerFrame
+    writeU32LE(0);                        // maxBytesPerSec
+    writeU32LE(0);                        // paddingGranularity
+    writeU32LE(0x10);                     // flags AVIF_HASINDEX
+    writeU32LE(0);                        // [84] totalFrames  – patch later
+    writeU32LE(0);                        // initialFrames
+    writeU32LE(1);                        // streams
+    writeU32LE(w * h * 3);               // suggestedBufferSize
+    writeU32LE(w);                        // width
+    writeU32LE(h);                        // height
+    writeU32LE(0); writeU32LE(0);
+    writeU32LE(0); writeU32LE(0);
+
+    // LIST strl – offset 96
+    writeFourCC("LIST");
+    writeU32LE(132);
+    writeFourCC("strl");
+
+    // strh – offset 108
+    writeFourCC("strh");
+    writeU32LE(56);
+    writeFourCC("vids");
+    writeFourCC("MJPG");
+    writeU32LE(0);                        // flags
+    writeU16LE(0);                        // priority
+    writeU16LE(0);                        // language
+    writeU32LE(0);                        // initialFrames
+    writeU32LE(1);                        // scale
+    writeU32LE(CAM_FPS_TARGET);           // rate  (fps)
+    writeU32LE(0);                        // start
+    writeU32LE(0);                        // [136+8+56-4=196] length  – patch later
+    writeU32LE(w * h * 3);               // suggestedBufferSize
+    writeU32LE(0xFFFFFFFF);              // quality
+    writeU32LE(0);                        // sampleSize
+    writeU16LE(0); writeU16LE(0);
+    writeU16LE((uint16_t)w);
+    writeU16LE((uint16_t)h);
+
+    // strf (BITMAPINFOHEADER) – offset 172
+    writeFourCC("strf");
+    writeU32LE(40);
+    writeU32LE(40);                       // biSize
+    writeU32LE(w);
+    writeU32LE(h);
+    writeU16LE(1);                        // biPlanes
+    writeU16LE(24);                       // biBitCount
+    writeFourCC("MJPG");                  // biCompression
+    writeU32LE(w * h * 3);               // biSizeImage
+    writeU32LE(0); writeU32LE(0);
+    writeU32LE(0); writeU32LE(0);
+
+    // JUNK chunk – padding tot offset 240
+    // Huidige positie: 12+8+12+64+8+8+64+8+48 = 232 bytes
+    writeFourCC("JUNK");
+    writeU32LE(4);
+    writeU32LE(0);                        // 4 bytes payload → totaal 240
+
+    // LIST movi – offset 240
+    writeFourCC("LIST");
+    writeU32LE(0);                        // [244] movi data size – patch later
+    writeFourCC("movi");
+    // Frames beginnen op offset 248
+}
+
+// ─── Patch-offsets (berekend op basis van header layout hierboven) ────────────
+static const uint32_t OFF_RIFF_SIZE    =   4;
+static const uint32_t OFF_TOTAL_FRAMES =  84;
+static const uint32_t OFF_STRH_LENGTH  = 196;
+static const uint32_t OFF_MOVI_SIZE    = 244;
 
 // ─── Publieke interface ────────────────────────────────────────────────────────
 
@@ -137,6 +145,7 @@ bool VideoRecorder::begin(const char* filename) {
     if (_recording) finish();
 
     strncpy(_filename, filename, sizeof(_filename) - 1);
+    _filename[sizeof(_filename) - 1] = '\0';
     _frameCount = 0;
     _moviSize   = 0;
     _startMs    = millis();
@@ -149,10 +158,19 @@ bool VideoRecorder::begin(const char* filename) {
         return false;
     }
 
-    // Tijdelijke header schrijven; dimensies onbekend tot eerste frame
-    // Schrijf 240 nul-bytes als placeholder
-    uint8_t zeros[240] = {};
-    _file.write(zeros, 240);
+    // Schrijf volledige header met echte dimensies direct.
+    // Framecount-velden worden later gepatcht via patchU32().
+    writeAviHeader(CAM_FRAME_WIDTH, CAM_FRAME_HEIGHT);
+
+    // Controleer dat we op offset 248 staan
+    if (_file.position() != 248) {
+#if DEBUG_SERIAL
+        Serial.printf("[Recorder] Header grootte fout: %u bytes (verwacht 248)\n",
+                      (uint32_t)_file.position());
+#endif
+        _file.close();
+        return false;
+    }
 
     _recording = true;
 #if DEBUG_SERIAL
@@ -163,31 +181,27 @@ bool VideoRecorder::begin(const char* filename) {
 
 bool VideoRecorder::writeFrame(const uint8_t* data, size_t len) {
     if (!_recording || !_file) return false;
-    if (_frameCount >= MAX_INDEX) return false;
+    if (len == 0) return false;
 
-    // Eerste frame: header terugschrijven met juiste dimensies
-    // Dimensies zijn ingebed in JPEG; we gebruiken standaard VGA als default
-    if (_frameCount == 0) {
-        _file.seek(0);
-        writeAviHeader(CAM_FRAME_WIDTH, CAM_FRAME_HEIGHT);
-        _file.seek(0, SeekEnd);
-    }
+    // Offset relatief aan movi-begin (offset 248) min 4 bytes voor "movi" fourcc
+    // De idx1 offset is relatief aan het begin van de movi LIST data,
+    // dat is 4 bytes na de "LIST" size veld, dus offset 248 (na de "movi" fourcc).
+    // Conventie: offset is relatief aan start van de movi data (byte 248).
+    uint32_t frameOffset = (uint32_t)_file.position() - 248;
 
-    // Bewaar offset relatief aan movi start (na "movi" fourcc op offset 244)
-    uint32_t frameOffset = (uint32_t)_file.position() - _dataStart - 4;
-
-    writeFourCC(_file, "00dc");
-    writeU32LE(_file, (uint32_t)len);
+    writeFourCC("00dc");
+    writeU32LE((uint32_t)len);
     _file.write(data, len);
-    // Padding op even grens
-    if (len & 1) _file.write((uint8_t)0);
+    if (len & 1) {
+        uint8_t pad = 0;
+        _file.write(&pad, 1);
+    }
 
     if (_frameCount < MAX_INDEX) {
         _index[_frameCount] = { frameOffset, (uint32_t)len };
     }
 
-    uint32_t chunkSize = 8 + len + (len & 1);
-    _moviSize += chunkSize;
+    _moviSize += 8 + (uint32_t)len + (len & 1);
     _frameCount++;
 
     return true;
@@ -197,18 +211,35 @@ bool VideoRecorder::finish() {
     if (!_recording || !_file) return false;
     _recording = false;
 
-    // Schrijf index
-    writeIndex();
+    // ── idx1 chunk schrijven ────────────────────────────────────────────────
+    uint32_t idxCount = (_frameCount < MAX_INDEX) ? _frameCount : MAX_INDEX;
+    writeFourCC("idx1");
+    writeU32LE(idxCount * 16);
+    for (uint32_t i = 0; i < idxCount; i++) {
+        writeFourCC("00dc");
+        writeU32LE(0x10);                  // AVIIF_KEYFRAME
+        writeU32LE(_index[i].offset);
+        writeU32LE(_index[i].size);
+    }
 
-    // Bijwerken van header velden
-    finalizeAviHeader();
+    // ── Header patchen ──────────────────────────────────────────────────────
+    uint32_t idxSize   = 8 + idxCount * 16;
+    uint32_t riffSize  = 248 - 8 + _moviSize + 8 + idxSize;
+    //                   ^248 = LIST hdrl + LIST movi header (240+8)
+    //                   subtract 8 for the RIFF header itself
+
+    patchU32(OFF_RIFF_SIZE,    riffSize);
+    patchU32(OFF_TOTAL_FRAMES, _frameCount);
+    patchU32(OFF_STRH_LENGTH,  _frameCount);
+    // movi LIST size = 4 (voor "movi" fourcc) + alle frame chunks
+    patchU32(OFF_MOVI_SIZE,    4 + _moviSize);
 
     _file.close();
 
     uint32_t elapsed = (millis() - _startMs) / 1000;
 #if DEBUG_SERIAL
-    Serial.printf("[Recorder] Opname gestopt: %u frames in %u sec -> %s\n",
-                  _frameCount, elapsed, _filename);
+    Serial.printf("[Recorder] Klaar: %u frames, %u sec, %u bytes movi → %s\n",
+                  _frameCount, elapsed, _moviSize, _filename);
 #endif
     return true;
 }

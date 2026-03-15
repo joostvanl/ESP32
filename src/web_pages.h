@@ -229,24 +229,28 @@ static const char HTML_VIDEOS[] PROGMEM = R"rawhtml(
   nav a{color:var(--muted);text-decoration:none;padding:.4rem .8rem;border-radius:.4rem;font-size:.9rem;transition:all .2s}
   nav a:hover,nav a.active{color:var(--text);background:rgba(255,255,255,.06)}
   nav{display:flex;gap:.25rem;margin-left:auto}
-  main{padding:1.5rem;max-width:960px;margin:0 auto}
+  main{padding:1.5rem;max-width:1100px;margin:0 auto}
   h2{font-size:1.1rem;color:var(--muted);margin-bottom:1.2rem;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
   .empty{color:var(--muted);text-align:center;padding:3rem;font-size:.95rem}
-  table{width:100%;border-collapse:collapse}
-  th{text-align:left;padding:.6rem .75rem;font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)}
-  td{padding:.75rem;border-bottom:1px solid rgba(45,49,72,.5);font-size:.9rem;vertical-align:middle}
-  tr:hover td{background:rgba(255,255,255,.02)}
-  .fname{font-family:monospace;font-size:.82rem;color:var(--accent2)}
-  .actions{display:flex;gap:.5rem}
-  .btn{display:inline-flex;align-items:center;gap:.3rem;padding:.35rem .7rem;border-radius:.4rem;border:none;cursor:pointer;font-size:.8rem;font-weight:600;text-decoration:none;transition:all .2s}
+  .storage-info{display:flex;gap:1.5rem;margin-bottom:1.5rem;padding:.75rem 1rem;background:var(--card);border:1px solid var(--border);border-radius:.5rem;font-size:.85rem}
+  .si-label{color:var(--muted);margin-right:.4rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem}
+  .vid-card{background:var(--card);border:1px solid var(--border);border-radius:.75rem;overflow:hidden;transition:border-color .2s}
+  .vid-card:hover{border-color:var(--accent2)}
+  .thumb-wrap{position:relative;width:100%;aspect-ratio:4/3;background:#000;overflow:hidden}
+  .thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+  .thumb-wrap .no-thumb{display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:var(--muted);font-size:.8rem}
+  .vid-info{padding:.75rem 1rem .5rem}
+  .vid-name{font-family:monospace;font-size:.78rem;color:var(--accent2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:.2rem}
+  .vid-size{font-size:.75rem;color:var(--muted)}
+  .vid-actions{display:flex;gap:.4rem;padding:.5rem 1rem .75rem;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .65rem;border-radius:.4rem;border:none;cursor:pointer;font-size:.78rem;font-weight:600;text-decoration:none;transition:all .2s}
   .btn-play{background:rgba(74,222,128,.15);color:var(--accent);border:1px solid rgba(74,222,128,.3)}
   .btn-play:hover{background:rgba(74,222,128,.25)}
   .btn-dl{background:rgba(34,211,238,.15);color:var(--accent2);border:1px solid rgba(34,211,238,.3)}
   .btn-dl:hover{background:rgba(34,211,238,.25)}
   .btn-del{background:rgba(248,113,113,.1);color:var(--danger);border:1px solid rgba(248,113,113,.25)}
   .btn-del:hover{background:rgba(248,113,113,.2)}
-  .storage-info{display:flex;gap:1.5rem;margin-bottom:1.5rem;padding:.75rem 1rem;background:var(--card);border:1px solid var(--border);border-radius:.5rem;font-size:.85rem}
-  .si-label{color:var(--muted);margin-right:.4rem}
 </style>
 </head>
 <body>
@@ -260,7 +264,7 @@ static const char HTML_VIDEOS[] PROGMEM = R"rawhtml(
 </header>
 <main>
   <h2>Opgeslagen video's</h2>
-  <div class="storage-info" id="storageInfo">
+  <div class="storage-info">
     <span><span class="si-label">Vrij:</span><span id="siFreq">—</span></span>
     <span><span class="si-label">Totaal:</span><span id="siTotal">—</span></span>
     <span><span class="si-label">Video's:</span><span id="siCount">—</span></span>
@@ -278,23 +282,30 @@ function loadVideos(){
       el.innerHTML = '<div class="empty">Geen video\'s opgeslagen.</div>';
       return;
     }
-    var rows = data.videos.map(function(v){
+    var cards = data.videos.map(function(v){
       var fn = encodeURIComponent(v.name);
-      return '<tr>' +
-        '<td class="fname">' + v.name + '</td>' +
-        '<td>' + v.size + '</td>' +
-        '<td><div class="actions">' +
+      return '<div class="vid-card">' +
+        '<div class="thumb-wrap">' +
+          '<img src="/thumbnail?file=' + fn + '" alt="" ' +
+               'onerror="this.outerHTML=\'<div class=no-thumb>geen preview</div>\'">' +
+        '</div>' +
+        '<div class="vid-info">' +
+          '<div class="vid-name" title="' + v.name + '">' + v.name + '</div>' +
+          '<div class="vid-size">' + v.size + '</div>' +
+        '</div>' +
+        '<div class="vid-actions">' +
           '<a href="/play?file=' + fn + '" class="btn btn-play">&#9654; Afspelen</a>' +
           '<a href="/download?file=' + fn + '" class="btn btn-dl">&#8681; Download</a>' +
-          '<button onclick="delVideo(\'' + v.name + '\')" class="btn btn-del">&#128465; Verwijder</button>' +
-        '</div></td></tr>';
+          '<button onclick="delVideo(\'' + v.name.replace(/'/g,"\\'")+  '\')" class="btn btn-del">&#128465;</button>' +
+        '</div>' +
+      '</div>';
     }).join('');
-    el.innerHTML = '<table><thead><tr><th>Bestandsnaam</th><th>Grootte</th><th>Acties</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    el.innerHTML = '<div class="grid">' + cards + '</div>';
   });
 }
 function delVideo(name){
-  if(!confirm('Video verwijderen: ' + name + '?')) return;
-  fetch('/delete?file=' + encodeURIComponent(name), {method:'GET'})
+  if(!confirm('Video verwijderen:\n' + name + '?')) return;
+  fetch('/delete?file=' + encodeURIComponent(name))
     .then(r=>r.json()).then(d=>{
       if(d.ok) loadVideos();
       else alert('Verwijderen mislukt');

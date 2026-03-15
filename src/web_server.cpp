@@ -197,21 +197,32 @@ bool WebServerManager::extractFirstJpeg(const String& aviPath, std::vector<uint8
     File f = SD_MMC.open(aviPath.c_str(), FILE_READ);
     if (!f || f.size() < 260) return false;
 
-    // Zoek "00dc" fourcc na offset 248 (start van movi data)
-    // We scannen maximaal 4 KB om snel te zijn
-    const size_t SCAN = 4096;
-    uint8_t buf[SCAN];
-    size_t read = f.read(buf, min((size_t)f.size(), SCAN));
+    // Scan maximaal 8 KB om het eerste "00dc" chunk te vinden.
+    // Frames beginnen op offset 248 (na de 248-byte header).
+    const size_t SCAN = 8192;
+    uint8_t* buf = (uint8_t*)malloc(SCAN);
+    if (!buf) { f.close(); return false; }
+
+    size_t rd = f.read(buf, min((size_t)f.size(), SCAN));
     f.close();
 
-    for (size_t i = 248; i + 8 < read; i++) {
+    bool found = false;
+    for (size_t i = 248; i + 8 <= rd; i++) {
         if (buf[i]=='0' && buf[i+1]=='0' && buf[i+2]=='d' && buf[i+3]=='c') {
-            uint32_t len = (uint32_t)buf[i+4] | ((uint32_t)buf[i+5]<<8)
-                         | ((uint32_t)buf[i+6]<<16) | ((uint32_t)buf[i+7]<<24);
-            if (len < 8 || len > 200000) continue;
+            uint32_t len = (uint32_t)buf[i+4]
+                         | ((uint32_t)buf[i+5] << 8)
+                         | ((uint32_t)buf[i+6] << 16)
+                         | ((uint32_t)buf[i+7] << 24);
+            if (len < 32 || len > 150000) { i += 3; continue; }
+
             size_t dataOff = i + 8;
-            if (dataOff + len > read) {
-                // Frame loopt buiten gescand venster – lees opnieuw
+            if (dataOff + len <= rd) {
+                // JPEG zit volledig in het gescande venster
+                out.assign(buf + dataOff, buf + dataOff + len);
+                found = true;
+            } else {
+                // Lees de rest van het bestand voor dit frame
+                free(buf);
                 File f2 = SD_MMC.open(aviPath.c_str(), FILE_READ);
                 if (!f2) return false;
                 f2.seek(dataOff);
@@ -220,11 +231,11 @@ bool WebServerManager::extractFirstJpeg(const String& aviPath, std::vector<uint8
                 f2.close();
                 return got == len;
             }
-            out.assign(buf + dataOff, buf + dataOff + len);
-            return true;
+            break;
         }
     }
-    return false;
+    free(buf);
+    return found;
 }
 
 void WebServerManager::handleThumbnail() {
@@ -264,5 +275,5 @@ void WebServerManager::handleThumbnail() {
     }
 
     _server.sendHeader("Cache-Control", "max-age=300");
-    _server.send(200, "image/jpeg", (const char*)jpeg.data(), jpeg.size());
+    _server.send(200, "image/jpeg", (const char*)jpeg.data(), (size_t)jpeg.size());
 }

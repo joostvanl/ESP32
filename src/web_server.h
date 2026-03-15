@@ -28,9 +28,12 @@ private:
     void handleDelete();
     void handleDownload();
     void handleStream();
+    void handleThumbnail();
     void handleApiStatus();
     void handleApiVideos();
     void handleNotFound();
 
     String buildFilePath(const String& name);
+    // Lees het eerste JPEG-frame uit een AVI-bestand
+    bool   extractFirstJpeg(const String& aviPath, std::vector<uint8_t>& out);
 };

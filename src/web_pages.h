@@ -49,6 +49,14 @@ static const char HTML_DASHBOARD[] PROGMEM = R"rawhtml(
   .idle-badge{display:inline-flex;align-items:center;gap:.4rem;background:rgba(74,222,128,.1);color:var(--accent);border:1px solid rgba(74,222,128,.25);padding:.3rem .7rem;border-radius:2rem;font-size:.8rem;font-weight:600}
   .actions{display:flex;gap:.75rem;flex-wrap:wrap}
   footer{text-align:center;color:var(--muted);font-size:.75rem;padding:2rem;border-top:1px solid var(--border)}
+  .thumb-card{background:var(--card);border:1px solid var(--border);border-radius:.75rem;overflow:hidden}
+  .thumb-card .card-label{padding:1rem 1.25rem .5rem;margin:0}
+  .thumb-wrap{position:relative;width:100%;background:#000;aspect-ratio:4/3;overflow:hidden}
+  .thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block;opacity:.85;transition:opacity .3s}
+  .thumb-wrap img:hover{opacity:1}
+  .thumb-overlay{position:absolute;bottom:0;left:0;right:0;padding:.5rem .75rem;background:linear-gradient(transparent,rgba(0,0,0,.7));font-size:.72rem;color:rgba(255,255,255,.8);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .thumb-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:.85rem}
+  .thumb-actions{padding:.75rem 1rem;display:flex;gap:.5rem}
 </style>
 </head>
 <body>
@@ -83,7 +91,19 @@ static const char HTML_DASHBOARD[] PROGMEM = R"rawhtml(
     </div>
   </div>
 
-  <h2>Acties</h2>
+  <h2>Laatste opname</h2>
+  <div class="thumb-card" id="thumbCard">
+    <div class="card-label">Meest recente video</div>
+    <div class="thumb-wrap" id="thumbWrap">
+      <div class="thumb-empty" id="thumbEmpty">Nog geen video's opgeslagen</div>
+    </div>
+    <div class="thumb-actions" id="thumbActions" style="display:none">
+      <a href="#" id="thumbPlay" class="btn btn-primary">&#9654; Afspelen</a>
+      <a href="#" id="thumbDl" class="btn btn-secondary">&#8681; Download</a>
+    </div>
+  </div>
+
+  <h2 style="margin-top:2rem">Acties</h2>
   <div class="actions">
     <a href="/live" class="btn btn-primary">&#9654; Live bekijken</a>
     <a href="/videos" class="btn btn-secondary">&#128249; Video's</a>
@@ -91,6 +111,7 @@ static const char HTML_DASHBOARD[] PROGMEM = R"rawhtml(
 </main>
 <footer>NestboxCam &mdash; ESP32-CAM &bull; <span id="ipAddr"></span></footer>
 <script>
+var lastVideo = '';
 function fetchStatus(){
   fetch('/api/status').then(r=>r.json()).then(d=>{
     document.getElementById('camStatus').textContent = d.camera ? 'OK' : 'Fout';
@@ -111,7 +132,22 @@ function fetchStatus(){
       rb.className = 'idle-badge';
       rb.innerHTML = '<span class="status-dot dot-green"></span>Inactief';
     }
+    if(d.last_video && d.last_video !== lastVideo){
+      lastVideo = d.last_video;
+      updateThumbnail(d.last_video);
+    }
   }).catch(()=>{});
+}
+function updateThumbnail(name){
+  var wrap = document.getElementById('thumbWrap');
+  var enc = encodeURIComponent(name);
+  wrap.innerHTML =
+    '<img src="/thumbnail?file=' + enc + '&t=' + Date.now() + '" alt="thumbnail" onerror="this.style.display=\'none\'">' +
+    '<div class="thumb-overlay">' + name + '</div>';
+  document.getElementById('thumbEmpty').style.display = 'none';
+  document.getElementById('thumbActions').style.display = 'flex';
+  document.getElementById('thumbPlay').href = '/play?file=' + enc;
+  document.getElementById('thumbDl').href  = '/download?file=' + enc;
 }
 fetchStatus();
 setInterval(fetchStatus, 3000);
@@ -135,7 +171,7 @@ static const char HTML_LIVE[] PROGMEM = R"rawhtml(
   header{background:var(--card);border-bottom:1px solid var(--border);padding:1rem 1.5rem;display:flex;align-items:center;gap:1rem}
   .logo{font-size:1.4rem;font-weight:700;color:var(--accent)}
   .logo span{color:var(--accent2)}
-  nav a{color:var(--muted);text-decoration:none;padding:.4rem .8rem;border-radius:.4rem;font-size:.9rem;transition:all .2s}
+  nav a{color:var(--muted);text-decoration:none;padding:.4rem .8rem;border-radius:.4rem;font-size:.9rem;transition:all .2s;cursor:pointer}
   nav a:hover,nav a.active{color:var(--text);background:rgba(255,255,255,.06)}
   nav{display:flex;gap:.25rem;margin-left:auto}
   .stream-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:1.5rem;flex-direction:column;gap:1rem}
@@ -151,9 +187,9 @@ static const char HTML_LIVE[] PROGMEM = R"rawhtml(
 <header>
   <div class="logo">Nestbox<span>Cam</span></div>
   <nav>
-    <a href="/">Dashboard</a>
-    <a href="/live" class="active">Live</a>
-    <a href="/videos">Video's</a>
+    <a onclick="stopAndGo('/')">Dashboard</a>
+    <a class="active">Live</a>
+    <a onclick="stopAndGo('/videos')">Video's</a>
   </nav>
 </header>
 <div class="stream-wrap">
@@ -162,8 +198,15 @@ static const char HTML_LIVE[] PROGMEM = R"rawhtml(
     <img src="/stream" id="stream" alt="Live stream">
     <div class="live-badge">LIVE</div>
   </div>
-  <p class="hint">Stream wordt automatisch vernieuwd. Sluit dit tabblad om te stoppen.</p>
+  <p class="hint">Klik op een menuitem om de stream te stoppen en terug te navigeren.</p>
 </div>
+<script>
+function stopAndGo(url) {
+  var img = document.getElementById('stream');
+  img.src = '';
+  setTimeout(function(){ window.location.href = url; }, 150);
+}
+</script>
 </body>
 </html>
 )rawhtml";

@@ -14,6 +14,7 @@ public:
     // Externe state die webserver moet kennen
     bool  isRecording  = false;
     bool  isStreaming  = false;
+    bool  ledOn        = false;
 
 private:
     WebServer      _server;
@@ -31,6 +32,7 @@ private:
     void handleThumbnail();
     void handleApiStatus();
     void handleApiVideos();
+    void handleApiLed();
     void handleNotFound();
 
     String buildFilePath(const String& name);

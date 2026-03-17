@@ -19,6 +19,7 @@ void WebServerManager::begin() {
     _server.on("/thumbnail", [this](){ handleThumbnail(); });
     _server.on("/api/status",[this](){ handleApiStatus(); });
     _server.on("/api/videos",[this](){ handleApiVideos(); });
+    _server.on("/api/led",   [this](){ handleApiLed(); });
     _server.onNotFound(      [this](){ handleNotFound(); });
 
     _server.begin();
@@ -136,6 +137,11 @@ void WebServerManager::handleStream() {
     }
 
     isStreaming = false;
+    // LED uitzetten als die aan stond voor de stream
+    if (ledOn) {
+        ledOn = false;
+        _camera.setIrLed(false);
+    }
 #if DEBUG_SERIAL
     Serial.println("[Web] Stream beëindigd");
 #endif
@@ -281,4 +287,27 @@ void WebServerManager::handleThumbnail() {
     _server.setContentLength(jpeg.size());
     _server.send(200, "image/jpeg", "");
     _server.client().write(jpeg.data(), jpeg.size());
+}
+
+void WebServerManager::handleApiLed() {
+    _server.sendHeader("Access-Control-Allow-Origin", "*");
+    _server.sendHeader("Cache-Control", "no-cache");
+
+    String state = _server.arg("state");
+    if (state == "on") {
+        ledOn = true;
+    } else if (state == "off") {
+        ledOn = false;
+    } else if (state == "toggle") {
+        ledOn = !ledOn;
+    }
+    // Geen geldige state-parameter? Dan alleen huidige staat teruggeven.
+
+    _camera.setIrLed(ledOn);
+#if DEBUG_SERIAL
+    Serial.printf("[Web] LED %s\n", ledOn ? "aan" : "uit");
+#endif
+
+    _server.send(200, "application/json",
+                 String("{\"led\":") + (ledOn ? "true" : "false") + "}");
 }

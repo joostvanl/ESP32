@@ -181,6 +181,10 @@ static const char HTML_LIVE[] PROGMEM = R"rawhtml(
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
   .hint{color:var(--muted);font-size:.85rem;text-align:center}
   .warn-box{background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:#fbbf24;padding:.75rem 1rem;border-radius:.5rem;font-size:.85rem;max-width:600px;text-align:center}
+  .controls{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;justify-content:center}
+  .led-btn{display:inline-flex;align-items:center;gap:.5rem;padding:.5rem 1.1rem;border-radius:.5rem;border:1px solid rgba(251,191,36,.35);background:rgba(251,191,36,.08);color:#fbbf24;font-size:.88rem;font-weight:600;cursor:pointer;transition:all .2s}
+  .led-btn:hover{background:rgba(251,191,36,.18)}
+  .led-btn.on{background:rgba(251,191,36,.22);border-color:rgba(251,191,36,.7);color:#fde68a;box-shadow:0 0 10px rgba(251,191,36,.25)}
 </style>
 </head>
 <body>
@@ -198,14 +202,45 @@ static const char HTML_LIVE[] PROGMEM = R"rawhtml(
     <img src="/stream" id="stream" alt="Live stream">
     <div class="live-badge">LIVE</div>
   </div>
-  <p class="hint">Klik op een menuitem om de stream te stoppen en terug te navigeren.</p>
+  <div class="controls">
+    <button class="led-btn" id="ledBtn" onclick="toggleLed()">&#128294; LED uit</button>
+    <p class="hint">Klik op een menuitem om de stream te stoppen en terug te navigeren.</p>
+  </div>
 </div>
 <script>
+var ledState = false;
+
+function updateLedBtn(){
+  var btn = document.getElementById('ledBtn');
+  if(ledState){
+    btn.textContent = '\uD83D\uDCA1 LED aan';
+    btn.className = 'led-btn on';
+  } else {
+    btn.textContent = '\uD83D\uDCA1 LED uit';
+    btn.className = 'led-btn';
+  }
+}
+
+function toggleLed(){
+  fetch('/api/led?state=toggle')
+    .then(function(r){ return r.json(); })
+    .then(function(d){ ledState = d.led; updateLedBtn(); })
+    .catch(function(){});
+}
+
 function stopAndGo(url) {
+  // LED uitzetten voor we weggaan
+  if(ledState){
+    fetch('/api/led?state=off').catch(function(){});
+  }
   var img = document.getElementById('stream');
   img.src = '';
   setTimeout(function(){ window.location.href = url; }, 150);
 }
+
+// Haal initiële LED-staat op bij laden
+fetch('/api/led').then(function(r){ return r.json(); })
+  .then(function(d){ ledState = d.led; updateLedBtn(); }).catch(function(){});
 </script>
 </body>
 </html>

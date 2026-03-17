@@ -232,14 +232,30 @@ static const char HTML_VIDEOS[] PROGMEM = R"rawhtml(
   main{padding:1.5rem;max-width:1100px;margin:0 auto}
   h2{font-size:1.1rem;color:var(--muted);margin-bottom:1.2rem;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
   .empty{color:var(--muted);text-align:center;padding:3rem;font-size:.95rem}
-  .storage-info{display:flex;gap:1.5rem;margin-bottom:1.5rem;padding:.75rem 1rem;background:var(--card);border:1px solid var(--border);border-radius:.5rem;font-size:.85rem}
+  .storage-info{display:flex;gap:1.5rem;margin-bottom:.75rem;padding:.75rem 1rem;background:var(--card);border:1px solid var(--border);border-radius:.5rem;font-size:.85rem}
   .si-label{color:var(--muted);margin-right:.4rem}
+  /* Selectie-toolbar */
+  .sel-bar{display:none;align-items:center;gap:.75rem;padding:.6rem 1rem;margin-bottom:.75rem;background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.25);border-radius:.5rem;font-size:.85rem}
+  .sel-bar.visible{display:flex}
+  .sel-count{color:var(--accent2);font-weight:600;flex:1}
+  .sel-btn{display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .7rem;border-radius:.4rem;border:none;cursor:pointer;font-size:.8rem;font-weight:600;transition:all .2s}
+  .sel-all{background:rgba(255,255,255,.07);color:var(--text)}
+  .sel-all:hover{background:rgba(255,255,255,.12)}
+  .sel-none{background:rgba(255,255,255,.04);color:var(--muted)}
+  .sel-none:hover{background:rgba(255,255,255,.08)}
+  .sel-del{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid rgba(248,113,113,.3)}
+  .sel-del:hover{background:rgba(248,113,113,.28)}
+  /* Grid */
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:.6rem}
-  .vid-card{background:var(--card);border:1px solid var(--border);border-radius:.5rem;overflow:hidden;transition:border-color .2s}
+  .vid-card{background:var(--card);border:2px solid var(--border);border-radius:.5rem;overflow:hidden;transition:border-color .15s;cursor:pointer;user-select:none}
   .vid-card:hover{border-color:var(--accent2)}
+  .vid-card.selected{border-color:var(--accent2);background:rgba(34,211,238,.06)}
+  /* Checkbox overlay op de thumbnail */
   .thumb-wrap{position:relative;width:100%;aspect-ratio:4/3;background:#000;overflow:hidden}
   .thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
   .thumb-wrap .no-thumb{display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:var(--muted);font-size:.7rem}
+  .card-check{position:absolute;top:.3rem;left:.3rem;width:18px;height:18px;border-radius:.25rem;border:2px solid rgba(255,255,255,.5);background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;transition:all .15s;font-size:.7rem;line-height:1}
+  .vid-card.selected .card-check{background:var(--accent2);border-color:var(--accent2);color:#0f1117}
   .vid-info{padding:.35rem .5rem .2rem}
   .vid-name{font-family:monospace;font-size:.65rem;color:var(--accent2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:.1rem}
   .vid-size{font-size:.62rem;color:var(--muted)}
@@ -269,9 +285,80 @@ static const char HTML_VIDEOS[] PROGMEM = R"rawhtml(
     <span><span class="si-label">Totaal:</span><span id="siTotal">—</span></span>
     <span><span class="si-label">Video's:</span><span id="siCount">—</span></span>
   </div>
+  <!-- Selectie-toolbar (verschijnt bij selectie) -->
+  <div class="sel-bar" id="selBar">
+    <span class="sel-count" id="selCount">0 geselecteerd</span>
+    <button class="sel-btn sel-all"  onclick="selectAll()">Alles</button>
+    <button class="sel-btn sel-none" onclick="selectNone()">Niets</button>
+    <button class="sel-btn sel-del"  onclick="deleteSelected()">&#128465; Verwijder geselecteerde</button>
+  </div>
   <div id="videoList"><div class="empty">Laden...</div></div>
 </main>
 <script>
+var selected = {};
+
+function updateSelBar(){
+  var keys = Object.keys(selected);
+  var n = keys.length;
+  var bar = document.getElementById('selBar');
+  bar.className = n > 0 ? 'sel-bar visible' : 'sel-bar';
+  document.getElementById('selCount').textContent = n + ' geselecteerd';
+}
+
+function toggleSelect(name, cardEl){
+  if(selected[name]){
+    delete selected[name];
+    cardEl.classList.remove('selected');
+    cardEl.querySelector('.card-check').textContent = '';
+  } else {
+    selected[name] = true;
+    cardEl.classList.add('selected');
+    cardEl.querySelector('.card-check').textContent = '✓';
+  }
+  updateSelBar();
+}
+
+function selectAll(){
+  document.querySelectorAll('.vid-card').forEach(function(c){
+    var n = c.dataset.name;
+    selected[n] = true;
+    c.classList.add('selected');
+    c.querySelector('.card-check').textContent = '✓';
+  });
+  updateSelBar();
+}
+
+function selectNone(){
+  selected = {};
+  document.querySelectorAll('.vid-card').forEach(function(c){
+    c.classList.remove('selected');
+    c.querySelector('.card-check').textContent = '';
+  });
+  updateSelBar();
+}
+
+function deleteSelected(){
+  var names = Object.keys(selected);
+  if(names.length === 0) return;
+  if(!confirm(names.length + ' video(\'s) verwijderen?')) return;
+  var todo = names.slice();
+  var failed = 0;
+  function next(){
+    if(todo.length === 0){
+      if(failed > 0) alert(failed + ' video(\'s) konden niet worden verwijderd.');
+      selected = {};
+      loadVideos();
+      return;
+    }
+    var name = todo.shift();
+    fetch('/delete?file=' + encodeURIComponent(name))
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if(!d.ok) failed++; next(); })
+      .catch(function(){ failed++; next(); });
+  }
+  next();
+}
+
 function loadVideos(){
   fetch('/api/videos').then(r=>r.json()).then(data=>{
     document.getElementById('siFreq').textContent = data.free_mb + ' MB';
@@ -280,37 +367,46 @@ function loadVideos(){
     var el = document.getElementById('videoList');
     if(data.videos.length === 0){
       el.innerHTML = '<div class="empty">Geen video\'s opgeslagen.</div>';
+      updateSelBar();
       return;
     }
     var cards = data.videos.map(function(v){
-      var fn = encodeURIComponent(v.name);
-      return '<div class="vid-card">' +
+      var fn  = encodeURIComponent(v.name);
+      var esc = v.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      var isSel = !!selected[v.name];
+      var selCls = isSel ? ' selected' : '';
+      var chk    = isSel ? '✓' : '';
+      return '<div class="vid-card' + selCls + '" data-name="' + esc + '" onclick="toggleSelect(\'' + esc + '\',this)">' +
         '<div class="thumb-wrap">' +
           '<img src="/thumbnail?file=' + fn + '" alt="" ' +
                'onerror="this.outerHTML=\'<div class=no-thumb>geen preview</div>\'">' +
+          '<div class="card-check">' + chk + '</div>' +
         '</div>' +
         '<div class="vid-info">' +
           '<div class="vid-name" title="' + v.name + '">' + v.name + '</div>' +
           '<div class="vid-size">' + v.size + '</div>' +
         '</div>' +
-        '<div class="vid-actions">' +
+        '<div class="vid-actions" onclick="event.stopPropagation()">' +
           '<a href="/play?file=' + fn + '" class="btn btn-play">&#9654;</a>' +
           '<a href="/download?file=' + fn + '" class="btn btn-dl">&#8681;</a>' +
-          '<button onclick="delVideo(\'' + v.name.replace(/'/g,"\\'")+  '\')" class="btn btn-del">&#128465;</button>' +
+          '<button onclick="delVideo(\'' + esc + '\')" class="btn btn-del">&#128465;</button>' +
         '</div>' +
       '</div>';
     }).join('');
     el.innerHTML = '<div class="grid">' + cards + '</div>';
+    updateSelBar();
   });
 }
+
 function delVideo(name){
   if(!confirm('Video verwijderen:\n' + name + '?')) return;
   fetch('/delete?file=' + encodeURIComponent(name))
     .then(r=>r.json()).then(d=>{
-      if(d.ok) loadVideos();
+      if(d.ok){ delete selected[name]; loadVideos(); }
       else alert('Verwijderen mislukt');
     });
 }
+
 loadVideos();
 </script>
 </body>

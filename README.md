@@ -100,6 +100,69 @@ Beschikbare resoluties:
 
 ---
 
+## Seriële logging (debuggen)
+
+Het systeem stuurt gedetailleerde logberichten via **Serial (UART)** op **115200 baud**.
+
+### Logs inzien
+
+**Arduino IDE**
+1. Sluit de ESP32-CAM aan via USB
+2. Tools → **Serial Monitor** (`Ctrl+Shift+M`)
+3. Stel baudrate rechtsonder in op **`115200`**
+4. Druk op de reset-knop om vanaf het begin te loggen
+
+**PlatformIO**
+```bash
+pio device monitor --baud 115200
+```
+
+**PuTTY / CoolTerm / andere terminal**
+- Verbinding: Serial, juiste COM-poort, 115200 baud
+
+### Wat je te zien krijgt
+
+Opstarten:
+```
+=== NestboxCam opstarten ===
+[SD] Kaart type: SDHC
+[SD] Capaciteit: 252 MB, Gebruikt: 49 MB, Vrij: 203 MB
+[SD] Schrijftest OK
+[Camera] Geïnitialiseerd
+[Camera] PSRAM beschikbaar
+[WiFi] Verbonden! IP: 192.168.1.42
+[Web] Server gestart op poort 80
+[PIR] Opwarmen gedurende 30 seconden...
+```
+
+Tijdens een opname:
+```
+[Main] Beweging gedetecteerd!
+[REC] begin() → /videos/video_2026-03-15_23-16-08.avi
+[REC] Header geschreven: 248/248 bytes, positie=248
+[REC] Frame #1: 8432 bytes, movi=8440, filepos=8688
+[REC] Frame #10: 8201 bytes, ...
+[REC] finish() – 600 frames, moviSize=4892016
+[REC] Bestandsgrootte na close: 5101648 bytes
+[REC] Header OK (RIFF gevonden)
+[REC] Opname voltooid: 600 frames in 60 sec
+```
+
+### Aandachtspunten bij problemen
+
+| Wat zoeken in de log | Betekenis |
+|---|---|
+| `FOUT:` | Kritieke fout |
+| `WAARSCHUWING:` | Iets klopt niet maar gaat door |
+| `Schrijftest OK` / `MISLUKT` | Is de SD-kaart schrijfbaar? |
+| `Header geschreven: X/248` | Moet exact 248 zijn |
+| `Frame #1:` aanwezig? | Worden er überhaupt frames opgenomen? |
+| `Bestandsgrootte na close: X` | Grootte vóór header-patch |
+| `Finale bestandsgrootte: X` | 0 = patch wiste het bestand! |
+| `Eerste 4 bytes: RIFF` | Header correct geschreven |
+
+---
+
 ## Webinterface
 
 Na opstarten zie je het IP-adres in de seriële monitor:

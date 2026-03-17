@@ -127,6 +127,10 @@ In `config.h` kun je **`USE_HTTPS`** op `1` zetten. De server draait dan op **po
 - **`USE_HTTPS 1`**: alleen HTTPS op poort 443 (aanbevolen).
 - **`USE_HTTPS 0`**: HTTP op poort 80, LED-API op poort 81 (oorspronkelijk gedrag).
 
+### Fout: `hwcrypto/sha.h: No such file or directory`
+
+Bij nieuwere versies van de ESP32 Arduino core is dit headerbestand verplaatst. **PlatformIO:** een pre-build script past de library automatisch aan; gewoon opnieuw bouwen (`pio run`) is voldoende. **Arduino IDE:** open in je Arduino-libraries map het bestand `esp32_https_server/src/HTTPConnection.hpp` (of de .cpp waarin de include staat) en vervang `#include <hwcrypto/sha.h>` door `#include <esp32/sha.h>`.
+
 ---
 
 ## Browser: download en afspelen

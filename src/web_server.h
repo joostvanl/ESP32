@@ -10,6 +10,7 @@
 #include <HTTPResponse.hpp>
 #include <ResourceNode.hpp>
 #include <string>
+#include <WiFi.h>
 #else
 #include <WebServer.h>
 #include <WiFi.h>

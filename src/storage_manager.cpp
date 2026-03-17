@@ -152,3 +152,54 @@ bool StorageManager::videoExists(const char* filename) {
     }
     return SD_MMC.exists(path.c_str());
 }
+
+int StorageManager::deleteOldVideos(int maxAgeDays) {
+    time_t now;
+    time(&now);
+
+    // Wacht tot NTP gesynchroniseerd is (tijd > 1 jan 2020)
+    if (now < 1577836800L) {
+        Serial.println("[SD] Auto-cleanup: NTP nog niet gesynchroniseerd, overgeslagen");
+        return 0;
+    }
+
+    auto videos = listVideos();
+    int deleted = 0;
+
+    for (auto& v : videos) {
+        // Bestandsnaam formaat: video_YYYY-MM-DD_HH-MM-SS.avi
+        // Positie:              0123456789...
+        if (v.name.length() < 22) continue;
+        if (!v.name.startsWith("video_")) continue;
+
+        int yr = v.name.substring(6, 10).toInt();
+        int mo = v.name.substring(11, 13).toInt();
+        int dy = v.name.substring(14, 16).toInt();
+
+        if (yr < 2020 || mo < 1 || mo > 12 || dy < 1 || dy > 31) continue;
+
+        struct tm t = {};
+        t.tm_year  = yr - 1900;
+        t.tm_mon   = mo - 1;
+        t.tm_mday  = dy;
+        t.tm_isdst = -1;
+        time_t fileTime = mktime(&t);
+
+        if (fileTime == (time_t)-1) continue;
+
+        double ageSec = difftime(now, fileTime);
+        if (ageSec > (double)maxAgeDays * 86400.0) {
+            Serial.printf("[SD] Auto-cleanup: verwijder %s (%.1f dagen oud)\n",
+                          v.name.c_str(), ageSec / 86400.0);
+            if (deleteVideo(v.name.c_str())) deleted++;
+        }
+    }
+
+    if (deleted > 0) {
+        Serial.printf("[SD] Auto-cleanup: %d video('s) verwijderd (ouder dan %d dag(en))\n",
+                      deleted, maxAgeDays);
+    } else {
+        Serial.println("[SD] Auto-cleanup: niets te verwijderen");
+    }
+    return deleted;
+}

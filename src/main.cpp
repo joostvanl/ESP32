@@ -17,8 +17,10 @@ WebServerManager webServer(storage, camera);
 
 // ─── Opname state ─────────────────────────────────────────────────────────────
 enum class State { IDLE, RECORDING };
-static State     appState       = State::IDLE;
-static unsigned long recStartMs = 0;
+static State         appState      = State::IDLE;
+static unsigned long recStartMs    = 0;
+static unsigned long lastCleanupMs = 0;
+static const unsigned long CLEANUP_INTERVAL_MS = 3600000UL; // 1 uur
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -183,6 +185,13 @@ void loop() {
             }
             break;
         }
+    }
+
+    // Auto-cleanup: verwijder video's ouder dan 2 dagen (elk uur, alleen in IDLE)
+    if (appState == State::IDLE &&
+        (lastCleanupMs == 0 || millis() - lastCleanupMs >= CLEANUP_INTERVAL_MS)) {
+        lastCleanupMs = millis();
+        storage.deleteOldVideos(2);
     }
 
     // Kleine delay om watchdog te voeden en CPU niet te verzadigen

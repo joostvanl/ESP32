@@ -49,14 +49,14 @@ static const char HTML_DASHBOARD[] PROGMEM = R"rawhtml(
   .idle-badge{display:inline-flex;align-items:center;gap:.4rem;background:rgba(74,222,128,.1);color:var(--accent);border:1px solid rgba(74,222,128,.25);padding:.3rem .7rem;border-radius:2rem;font-size:.8rem;font-weight:600}
   .actions{display:flex;gap:.75rem;flex-wrap:wrap}
   footer{text-align:center;color:var(--muted);font-size:.75rem;padding:2rem;border-top:1px solid var(--border)}
-  .thumb-card{background:var(--card);border:1px solid var(--border);border-radius:.75rem;overflow:hidden}
-  .thumb-card .card-label{padding:1rem 1.25rem .5rem;margin:0}
+  .thumb-card{background:var(--card);border:1px solid var(--border);border-radius:.75rem;overflow:hidden;max-width:240px}
+  .thumb-card .card-label{padding:.6rem 1rem .3rem;margin:0}
   .thumb-wrap{position:relative;width:100%;background:#000;aspect-ratio:4/3;overflow:hidden}
   .thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block;opacity:.85;transition:opacity .3s}
   .thumb-wrap img:hover{opacity:1}
-  .thumb-overlay{position:absolute;bottom:0;left:0;right:0;padding:.5rem .75rem;background:linear-gradient(transparent,rgba(0,0,0,.7));font-size:.72rem;color:rgba(255,255,255,.8);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .thumb-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:.85rem}
-  .thumb-actions{padding:.75rem 1rem;display:flex;gap:.5rem}
+  .thumb-overlay{position:absolute;bottom:0;left:0;right:0;padding:.3rem .5rem;background:linear-gradient(transparent,rgba(0,0,0,.7));font-size:.65rem;color:rgba(255,255,255,.8);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .thumb-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:.8rem}
+  .thumb-actions{padding:.4rem .75rem .6rem;display:flex;gap:.4rem}
 </style>
 </head>
 <body>
@@ -234,17 +234,17 @@ static const char HTML_VIDEOS[] PROGMEM = R"rawhtml(
   .empty{color:var(--muted);text-align:center;padding:3rem;font-size:.95rem}
   .storage-info{display:flex;gap:1.5rem;margin-bottom:1.5rem;padding:.75rem 1rem;background:var(--card);border:1px solid var(--border);border-radius:.5rem;font-size:.85rem}
   .si-label{color:var(--muted);margin-right:.4rem}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem}
-  .vid-card{background:var(--card);border:1px solid var(--border);border-radius:.75rem;overflow:hidden;transition:border-color .2s}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:.6rem}
+  .vid-card{background:var(--card);border:1px solid var(--border);border-radius:.5rem;overflow:hidden;transition:border-color .2s}
   .vid-card:hover{border-color:var(--accent2)}
   .thumb-wrap{position:relative;width:100%;aspect-ratio:4/3;background:#000;overflow:hidden}
   .thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
-  .thumb-wrap .no-thumb{display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:var(--muted);font-size:.8rem}
-  .vid-info{padding:.75rem 1rem .5rem}
-  .vid-name{font-family:monospace;font-size:.78rem;color:var(--accent2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:.2rem}
-  .vid-size{font-size:.75rem;color:var(--muted)}
-  .vid-actions{display:flex;gap:.4rem;padding:.5rem 1rem .75rem;flex-wrap:wrap}
-  .btn{display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .65rem;border-radius:.4rem;border:none;cursor:pointer;font-size:.78rem;font-weight:600;text-decoration:none;transition:all .2s}
+  .thumb-wrap .no-thumb{display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:var(--muted);font-size:.7rem}
+  .vid-info{padding:.35rem .5rem .2rem}
+  .vid-name{font-family:monospace;font-size:.65rem;color:var(--accent2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:.1rem}
+  .vid-size{font-size:.62rem;color:var(--muted)}
+  .vid-actions{display:flex;gap:.25rem;padding:.25rem .5rem .4rem;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:.2rem;padding:.2rem .4rem;border-radius:.3rem;border:none;cursor:pointer;font-size:.7rem;font-weight:600;text-decoration:none;transition:all .2s}
   .btn-play{background:rgba(74,222,128,.15);color:var(--accent);border:1px solid rgba(74,222,128,.3)}
   .btn-play:hover{background:rgba(74,222,128,.25)}
   .btn-dl{background:rgba(34,211,238,.15);color:var(--accent2);border:1px solid rgba(34,211,238,.3)}
@@ -294,8 +294,8 @@ function loadVideos(){
           '<div class="vid-size">' + v.size + '</div>' +
         '</div>' +
         '<div class="vid-actions">' +
-          '<a href="/play?file=' + fn + '" class="btn btn-play">&#9654; Afspelen</a>' +
-          '<a href="/download?file=' + fn + '" class="btn btn-dl">&#8681; Download</a>' +
+          '<a href="/play?file=' + fn + '" class="btn btn-play">&#9654;</a>' +
+          '<a href="/download?file=' + fn + '" class="btn btn-dl">&#8681;</a>' +
           '<button onclick="delVideo(\'' + v.name.replace(/'/g,"\\'")+  '\')" class="btn btn-del">&#128465;</button>' +
         '</div>' +
       '</div>';

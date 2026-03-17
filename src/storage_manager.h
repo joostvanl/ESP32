@@ -30,6 +30,9 @@ public:
     bool deleteVideo(const char* filename);
     bool videoExists(const char* filename);
 
+    // Verwijder video's die ouder zijn dan maxAgeDays dagen (op basis van bestandsnaam-timestamp)
+    int  deleteOldVideos(int maxAgeDays = 2);
+
     // Zorg dat /videos map bestaat
     bool ensureVideoDir();
 };

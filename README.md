@@ -100,6 +100,24 @@ Beschikbare resoluties:
 
 ---
 
+## Automatische opruiming
+
+Video's ouder dan **2 dagen** worden automatisch verwijderd. Dit gebeurt:
+
+- Direct bij het opstarten (zodra NTP gesynchroniseerd is)
+- Daarna elk uur, zolang het systeem in de **wachtstand** staat (geen actieve opname)
+
+De leeftijd wordt bepaald op basis van de datum in de bestandsnaam (`video_YYYY-MM-DD_HH-MM-SS.avi`). Als NTP nog niet gesynchroniseerd is, wordt de cleanup overgeslagen.
+
+In de seriële log is dit zichtbaar als:
+
+```
+[SD] Auto-cleanup: verwijder video_2026-03-12_10-30-00.avi (2.5 dagen oud)
+[SD] Auto-cleanup: 1 video('s) verwijderd (ouder dan 2 dag(en))
+```
+
+---
+
 ## Seriële logging (debuggen)
 
 Het systeem stuurt gedetailleerde logberichten via **Serial (UART)** op **115200 baud**.

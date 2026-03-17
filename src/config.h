@@ -8,6 +8,7 @@
 
 // ─── Webserver ────────────────────────────────────────────────────────────────
 #define WEB_PORT         80
+#define LED_API_PORT     81   // aparte poort voor LED-API tijdens stream (anders geblokkeerd)
 
 // ─── Camera (AI Thinker ESP32-CAM) ───────────────────────────────────────────
 #define CAM_PIN_PWDN     32
@@ -42,6 +43,7 @@
 // ─── PIR sensor ──────────────────────────────────────────────────────────────
 #define PIR_PIN          13     // GPIO pin voor PIR sensor
 #define PIR_WARMUP_MS    30000  // PIR opwarmtijd bij start (ms)
+#define PIR_DEBOUNCE_MS  5000   // na een trigger X ms geen nieuwe opname (anti-dubbel)
 
 // ─── IR LED ──────────────────────────────────────────────────────────────────
 #define IR_LED_PIN        4     // ingebouwde flash LED, ook bruikbaar voor IR

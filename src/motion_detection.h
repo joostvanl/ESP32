@@ -14,7 +14,8 @@ private:
     volatile bool _triggered = false;
     bool          _active    = false;
     bool          _warmupDone = false;
-    unsigned long _startTime  = 0;
+    unsigned long _startTime   = 0;
+    unsigned long _lastTriggerMs = 0;  // debounce: geen nieuwe opname vlak na trigger
 
     static void IRAM_ATTR pirISR();
     static MotionDetection* _instance;

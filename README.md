@@ -70,6 +70,7 @@ Pas minimaal de WiFi-instellingen aan vóór het uploaden:
 #define WIFI_SSID        "JouwSSID"
 #define WIFI_PASSWORD    "JouwWachtwoord"
 #define PIR_PIN          13      // GPIO van PIR sensor
+#define PIR_DEBOUNCE_MS  5000    // na een trigger geen nieuwe opname (anti-dubbel)
 #define RECORD_DURATION_SEC  60  // seconden per opname
 #define IR_LED_ENABLED   false   // true = IR LED aan tijdens opname
 #define MIN_FREE_MB      50      // stop opname bij < 50 MB vrij
@@ -115,6 +116,14 @@ In de seriële log is dit zichtbaar als:
 [SD] Auto-cleanup: verwijder video_2026-03-12_10-30-00.avi (2.5 dagen oud)
 [SD] Auto-cleanup: 1 video('s) verwijderd (ouder dan 2 dag(en))
 ```
+
+---
+
+## Browser: download en afspelen
+
+Omdat de webinterface via **HTTP** (niet HTTPS) wordt aangeboden, kan Chrome een waarschuwing tonen: **"Onveilige download geblokkeerd"**. Het bestand is lokaal op de ESP32 en veilig; je kunt op **Behouden** klikken om de download toe te staan. Voor afspelen in de browser: als de video niet direct speelt, download de AVI en open hem in VLC.
+
+De LED-knop op de live-pagina werkt via een aparte poort (**81**) zodat die ook tijdens de stream bediend kan worden.
 
 ---
 

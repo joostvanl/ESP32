@@ -1,5 +1,6 @@
 #pragma once
 #include <WebServer.h>
+#include <WiFi.h>
 #include "storage_manager.h"
 #include "camera_control.h"
 #include "config.h"
@@ -16,8 +17,12 @@ public:
     bool  isStreaming  = false;
     bool  ledOn        = false;
 
+    // Verwerk eventuele LED-API requests op poort 81 (aanroepen tijdens stream)
+    void processLedServer();
+
 private:
     WebServer      _server;
+    WiFiServer     _ledServer;
     StorageManager& _storage;
     CameraControl&  _camera;
 

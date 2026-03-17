@@ -209,6 +209,7 @@ static const char HTML_LIVE[] PROGMEM = R"rawhtml(
 </div>
 <script>
 var ledState = false;
+var ledApi = 'http://' + location.hostname + ':81/api/led';
 
 function updateLedBtn(){
   var btn = document.getElementById('ledBtn');
@@ -222,24 +223,20 @@ function updateLedBtn(){
 }
 
 function toggleLed(){
-  fetch('/api/led?state=toggle')
+  fetch(ledApi + '?state=toggle')
     .then(function(r){ return r.json(); })
     .then(function(d){ ledState = d.led; updateLedBtn(); })
     .catch(function(){});
 }
 
 function stopAndGo(url) {
-  // LED uitzetten voor we weggaan
-  if(ledState){
-    fetch('/api/led?state=off').catch(function(){});
-  }
+  if(ledState){ fetch(ledApi + '?state=off').catch(function(){}); }
   var img = document.getElementById('stream');
   img.src = '';
   setTimeout(function(){ window.location.href = url; }, 150);
 }
 
-// Haal initiële LED-staat op bij laden
-fetch('/api/led').then(function(r){ return r.json(); })
+fetch(ledApi).then(function(r){ return r.json(); })
   .then(function(d){ ledState = d.led; updateLedBtn(); }).catch(function(){});
 </script>
 </body>

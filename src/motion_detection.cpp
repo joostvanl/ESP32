@@ -35,9 +35,13 @@ void MotionDetection::loop() {
 
 bool MotionDetection::motionDetected() {
     if (!_warmupDone) return false;
+    unsigned long now = millis();
+    if (now - _lastTriggerMs < (unsigned long)PIR_DEBOUNCE_MS)
+        return false;
     if (_triggered) {
         _triggered = false;
-        _active    = true;
+        _lastTriggerMs = now;
+        _active = true;
         return true;
     }
     return false;

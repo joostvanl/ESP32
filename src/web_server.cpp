@@ -6,7 +6,7 @@
 #include <vector>
 
 WebServerManager::WebServerManager(StorageManager& storage, CameraControl& camera)
-    : _server(WEB_PORT), _storage(storage), _camera(camera) {}
+    : _server(WEB_PORT), _ledServer(LED_API_PORT), _storage(storage), _camera(camera) {}
 
 void WebServerManager::begin() {
     _server.on("/",          [this](){ handleRoot(); });
@@ -23,13 +23,15 @@ void WebServerManager::begin() {
     _server.onNotFound(      [this](){ handleNotFound(); });
 
     _server.begin();
+    _ledServer.begin();
 #if DEBUG_SERIAL
-    Serial.printf("[Web] Server gestart op poort %d\n", WEB_PORT);
+    Serial.printf("[Web] Server poort %d, LED-API poort %d\n", WEB_PORT, LED_API_PORT);
 #endif
 }
 
 void WebServerManager::loop() {
     _server.handleClient();
+    processLedServer();   // LED-API op poort 81 (ook buiten stream)
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -88,11 +90,16 @@ void WebServerManager::handleDownload() {
         return;
     }
 
-    String disposition = "attachment; filename=\"" + name + "\"";
+    // Veilige bestandsnaam voor Content-Disposition (alleen basenaam, geen pad)
+    String safeName = name;
+    int lastSlash = name.lastIndexOf('/');
+    if (lastSlash >= 0) safeName = name.substring(lastSlash + 1);
+    String disposition = "inline; filename=\"" + safeName + "\"";
     _server.sendHeader("Content-Disposition", disposition);
     _server.sendHeader("Content-Length", String(f.size()));
     _server.sendHeader("Cache-Control", "no-cache");
-    _server.streamFile(f, "video/avi");
+    _server.sendHeader("X-Content-Type-Options", "nosniff");
+    _server.streamFile(f, "video/x-msvideo");
     f.close();
 }
 
@@ -120,6 +127,8 @@ void WebServerManager::handleStream() {
     const unsigned long frameInterval = 1000 / CAM_FPS_TARGET;
 
     while (client.connected()) {
+        processLedServer();   // LED-knop op poort 81 werkt tijdens stream
+
         unsigned long now = millis();
         if (now - lastFrame < frameInterval) {
             delay(5);
@@ -287,6 +296,41 @@ void WebServerManager::handleThumbnail() {
     _server.setContentLength(jpeg.size());
     _server.send(200, "image/jpeg", "");
     _server.client().write(jpeg.data(), jpeg.size());
+}
+
+void WebServerManager::processLedServer() {
+    WiFiClient client = _ledServer.available();
+    if (!client || !client.connected()) return;
+
+    String req;
+    while (client.available()) {
+        char c = client.read();
+        if (c == '\n' || c == '\r') break;
+        req += c;
+        if (req.length() > 120) break;
+    }
+    while (client.available()) client.read();
+
+    if (req.indexOf("GET /api/led") >= 0) {
+        if (req.indexOf("state=on") >= 0)      ledOn = true;
+        else if (req.indexOf("state=off") >= 0) ledOn = false;
+        else if (req.indexOf("state=toggle") >= 0) ledOn = !ledOn;
+        _camera.setIrLed(ledOn);
+#if DEBUG_SERIAL
+        Serial.printf("[Web] LED (poort 81) %s\n", ledOn ? "aan" : "uit");
+#endif
+    }
+
+    String json = "{\"led\":" + String(ledOn ? "true" : "false") + "}";
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: application/json");
+    client.println("Connection: close");
+    client.println("Cache-Control: no-cache");
+    client.print("Content-Length: "); client.println(json.length());
+    client.println();
+    client.print(json);
+    client.flush();
+    client.stop();
 }
 
 void WebServerManager::handleApiLed() {

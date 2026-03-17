@@ -16,12 +16,18 @@ public:
     const char* currentFile() const { return _filename; }
     uint32_t    frameCount()  const { return _frameCount; }
 
-    static const uint32_t HEADER_SIZE = 248;
+    // Header layout (bytes):
+    //   [  0] RIFF + AVI                   12
+    //   [ 12] LIST hdrl (192)             212   → ends at 211
+    //   [212] JUNK (28)                    28   → ends at 239
+    //   [240] LIST movi header             12   ("LIST"+size+"movi")
+    //   [252] frames starten hier
+    static const uint32_t HEADER_SIZE = 252;
 
 private:
     File     _file;
     char     _filename[64];
-    char     _vfsPath[80];   // /sdcard + _filename voor fopen
+    char     _vfsPath[80];
     bool     _recording  = false;
     uint32_t _frameCount = 0;
     uint32_t _moviSize   = 0;

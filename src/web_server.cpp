@@ -192,14 +192,14 @@ void WebServerManager::handleNotFound() {
 }
 
 // ─── Thumbnail: eerste JPEG-frame uit AVI ────────────────────────────────────
-// AVI-structuur: RIFF header (240 bytes) → LIST movi → "00dc" chunk → JPEG data
+// AVI-structuur: RIFF header (252 bytes) → "00dc" chunk → JPEG data
 
 bool WebServerManager::extractFirstJpeg(const String& aviPath, std::vector<uint8_t>& out) {
     File f = SD_MMC.open(aviPath.c_str(), FILE_READ);
     if (!f || f.size() < 260) return false;
 
     // Scan maximaal 8 KB om het eerste "00dc" chunk te vinden.
-    // Frames beginnen op offset 248 (VideoRecorder::HEADER_SIZE).
+    // Frames beginnen op offset VideoRecorder::HEADER_SIZE (252).
     const size_t FRAME_START = VideoRecorder::HEADER_SIZE;
     const size_t SCAN = 8192;
     uint8_t* buf = (uint8_t*)malloc(SCAN);

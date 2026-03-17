@@ -8,7 +8,9 @@
 
 // ─── Webserver ────────────────────────────────────────────────────────────────
 #define WEB_PORT         80
-#define LED_API_PORT     81   // aparte poort voor LED-API tijdens stream (anders geblokkeerd)
+#define WEB_PORT_HTTPS   443  // bij USE_HTTPS
+#define LED_API_PORT     81   // alleen bij HTTP: aparte poort voor LED-API tijdens stream
+#define USE_HTTPS        1    // 1 = HTTPS met self-signed cert (browser waarschuwing eerste keer)
 
 // ─── Camera (AI Thinker ESP32-CAM) ───────────────────────────────────────────
 #define CAM_PIN_PWDN     32

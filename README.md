@@ -69,6 +69,7 @@ Pas minimaal de WiFi-instellingen aan vóór het uploaden:
 ```cpp
 #define WIFI_SSID        "JouwSSID"
 #define WIFI_PASSWORD    "JouwWachtwoord"
+#define USE_HTTPS        1      // 1 = HTTPS (poort 443, self-signed cert), 0 = HTTP (poort 80)
 #define PIR_PIN          13      // GPIO van PIR sensor
 #define PIR_DEBOUNCE_MS  5000    // na een trigger geen nieuwe opname (anti-dubbel)
 #define RECORD_DURATION_SEC  60  // seconden per opname
@@ -119,11 +120,24 @@ In de seriële log is dit zichtbaar als:
 
 ---
 
+## HTTPS (optioneel)
+
+In `config.h` kun je **`USE_HTTPS`** op `1` zetten. De server draait dan op **poort 443** met een **self-signed certificaat** (gegenereerd bij elke start, eerste keer ca. 30 seconden). Geen beveiligingswaarschuwing meer bij download of afspelen; de browser vraagt één keer om het certificaat te vertrouwen (bijv. “Geavanceerd” → “Doorgaan naar …”).
+
+- **`USE_HTTPS 1`**: alleen HTTPS op poort 443 (aanbevolen).
+- **`USE_HTTPS 0`**: HTTP op poort 80, LED-API op poort 81 (oorspronkelijk gedrag).
+
+---
+
 ## Browser: download en afspelen
 
-Omdat de webinterface via **HTTP** (niet HTTPS) wordt aangeboden, kan Chrome een waarschuwing tonen: **"Onveilige download geblokkeerd"**. Het bestand is lokaal op de ESP32 en veilig; je kunt op **Behouden** klikken om de download toe te staan. Voor afspelen in de browser: als de video niet direct speelt, download de AVI en open hem in VLC.
+Video's worden **via een blob** geladen (fetch + object URL). Daardoor:
+- Geen beveiligingsmelding bij download (bij HTTP komt de download uit een blob; bij HTTPS is de verbinding al beveiligd).
+- Afspelen in de browser: de player laadt de video via fetch en speelt de blob af. Ondersteunt je browser AVI/MJPEG niet, gebruik dan de downloadknop en open met VLC.
 
-De LED-knop op de live-pagina werkt via een aparte poort (**81**) zodat die ook tijdens de stream bediend kan worden.
+De server ondersteunt **Range-requests** (`Accept-Ranges: bytes`, 206 Partial Content) voor videostreaming.
+
+De LED-knop op de live-pagina: bij **HTTP** via poort **81** (zodat die tijdens de stream werkt); bij **HTTPS** via dezelfde verbinding (`/api/led`).
 
 ---
 

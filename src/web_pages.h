@@ -99,7 +99,7 @@ static const char HTML_DASHBOARD[] PROGMEM = R"rawhtml(
     </div>
     <div class="thumb-actions" id="thumbActions" style="display:none">
       <a href="#" id="thumbPlay" class="btn btn-primary">&#9654; Afspelen</a>
-      <a href="#" id="thumbDl" class="btn btn-secondary">&#8681; Download</a>
+      <button type="button" id="thumbDl" class="btn btn-secondary">&#8681; Download</button>
     </div>
   </div>
 
@@ -147,7 +147,17 @@ function updateThumbnail(name){
   document.getElementById('thumbEmpty').style.display = 'none';
   document.getElementById('thumbActions').style.display = 'flex';
   document.getElementById('thumbPlay').href = '/play?file=' + enc;
-  document.getElementById('thumbDl').href  = '/download?file=' + enc;
+  var dlBtn = document.getElementById('thumbDl');
+  dlBtn.onclick = function(){
+    fetch('/download?file=' + enc).then(function(r){ return r.blob(); })
+      .then(function(blob){
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name || 'video.avi';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+  };
 }
 fetchStatus();
 setInterval(fetchStatus, 3000);
@@ -209,7 +219,7 @@ static const char HTML_LIVE[] PROGMEM = R"rawhtml(
 </div>
 <script>
 var ledState = false;
-var ledApi = 'http://' + location.hostname + ':81/api/led';
+var ledApi = (location.protocol === 'https:' ? '' : 'http://' + location.hostname + ':81') + '/api/led';
 
 function updateLedBtn(){
   var btn = document.getElementById('ledBtn');
@@ -420,7 +430,7 @@ function loadVideos(){
         '</div>' +
         '<div class="vid-actions" onclick="event.stopPropagation()">' +
           '<a href="/play?file=' + fn + '" class="btn btn-play">&#9654;</a>' +
-          '<a href="/download?file=' + fn + '" class="btn btn-dl">&#8681;</a>' +
+          '<button type="button" onclick="downloadVideo(\'' + esc + '\')" class="btn btn-dl">&#8681;</button>' +
           '<button onclick="delVideo(\'' + esc + '\')" class="btn btn-del">&#128465;</button>' +
         '</div>' +
       '</div>';
@@ -428,6 +438,20 @@ function loadVideos(){
     el.innerHTML = '<div class="grid">' + cards + '</div>';
     updateSelBar();
   });
+}
+
+function downloadVideo(name){
+  var enc = encodeURIComponent(name);
+  fetch('/download?file=' + enc)
+    .then(function(r){ return r.blob(); })
+    .then(function(blob){
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name || 'video.avi';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    })
+    .catch(function(){ alert('Download mislukt'); });
 }
 
 function delVideo(name){
@@ -485,14 +509,15 @@ static const char HTML_PLAYER[] PROGMEM = R"rawhtml(
   </nav>
 </header>
 <div class="player-wrap">
-  <div class="info-box">&#8505; AVI/MJPEG bestanden worden afgespeeld via de browser. Als de video niet afspeelt, gebruik dan de downloadknop en open met VLC.</div>
-  <video id="player" controls autoplay>
-    <source id="vsrc" src="" type="video/avi">
-    Uw browser ondersteunt deze video niet. <a href="#" id="dllink">Download de video</a>.
+  <div class="info-box">&#8505; Video wordt via een veilige blob geladen (geen beveiligingsmelding). Werkt afspelen niet, gebruik dan Download en open met VLC.</div>
+  <div id="loadStatus" class="meta">Laden...</div>
+  <video id="player" controls autoplay style="display:none">
+    <source id="vsrc" src="" type="video/x-msvideo">
+    Uw browser ondersteunt deze video niet.
   </video>
   <div class="meta" id="fname">—</div>
   <div class="actions">
-    <a href="#" id="dlbtn" class="btn btn-primary">&#8681; Download</a>
+    <button type="button" id="dlbtn" class="btn btn-primary">&#8681; Download</button>
     <a href="/videos" class="btn btn-secondary">&#8592; Terug</a>
   </div>
 </div>
@@ -500,11 +525,39 @@ static const char HTML_PLAYER[] PROGMEM = R"rawhtml(
 var params = new URLSearchParams(window.location.search);
 var file = params.get('file') || '';
 var enc = encodeURIComponent(file);
-document.getElementById('vsrc').src = '/download?file=' + enc;
-document.getElementById('player').load();
+var videoBlobUrl = null;
 document.getElementById('fname').textContent = file;
-document.getElementById('dlbtn').href = '/download?file=' + enc;
-document.getElementById('dllink').href = '/download?file=' + enc;
+
+function revokeBlob(){ if(videoBlobUrl){ URL.revokeObjectURL(videoBlobUrl); videoBlobUrl = null; } }
+
+fetch('/download?file=' + enc)
+  .then(function(r){ if(!r.ok) throw new Error(r.status); return r.blob(); })
+  .then(function(blob){
+    revokeBlob();
+    videoBlobUrl = URL.createObjectURL(blob);
+    var v = document.getElementById('player');
+    var s = document.getElementById('vsrc');
+    s.src = videoBlobUrl;
+    v.style.display = 'block';
+    document.getElementById('loadStatus').style.display = 'none';
+    v.load();
+    v.play().catch(function(){});
+  })
+  .catch(function(){ document.getElementById('loadStatus').textContent = 'Laden mislukt. Gebruik Download en open met VLC.'; });
+
+document.getElementById('dlbtn').onclick = function(){
+  fetch('/download?file=' + enc)
+    .then(function(r){ return r.blob(); })
+    .then(function(blob){
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = file || 'video.avi';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+};
+
+window.addEventListener('beforeunload', revokeBlob);
 </script>
 </body>
 </html>

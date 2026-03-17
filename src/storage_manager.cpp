@@ -2,32 +2,54 @@
 #include <time.h>
 
 bool StorageManager::begin() {
-    // SD_MMC gebruikt de ingebouwde SD-kaart interface van de AI Thinker ESP32-CAM
-    // 1-bit modus voor compatibiliteit; hogere snelheid via 4-bit is ook mogelijk
-    if (!SD_MMC.begin("/sdcard", true)) { // true = 1-bit modus
-#if DEBUG_SERIAL
+    if (!SD_MMC.begin("/sdcard", true)) {
         Serial.println("[SD] Initialisatie mislukt");
-#endif
         return false;
     }
 
     uint8_t cardType = SD_MMC.cardType();
     if (cardType == CARD_NONE) {
-#if DEBUG_SERIAL
         Serial.println("[SD] Geen SD-kaart gevonden");
-#endif
         return false;
     }
 
-#if DEBUG_SERIAL
     Serial.printf("[SD] Kaart type: %s\n",
         cardType == CARD_MMC  ? "MMC"  :
         cardType == CARD_SD   ? "SD"   :
         cardType == CARD_SDHC ? "SDHC" : "onbekend");
-    Serial.printf("[SD] Capaciteit: %llu MB\n", SD_MMC.totalBytes() / (1024*1024));
-#endif
+    Serial.printf("[SD] Capaciteit: %llu MB, Gebruikt: %llu MB, Vrij: %llu MB\n",
+        SD_MMC.totalBytes()/(1024*1024),
+        SD_MMC.usedBytes()/(1024*1024),
+        (SD_MMC.totalBytes()-SD_MMC.usedBytes())/(1024*1024));
 
-    return ensureVideoDir();
+    if (!ensureVideoDir()) return false;
+
+    // ── SD schrijftest ────────────────────────────────────────────────────
+    Serial.println("[SD] Schrijftest uitvoeren...");
+    const char* testPath = "/videos/_sdtest.tmp";
+    File t = SD_MMC.open(testPath, FILE_WRITE);
+    if (!t) {
+        Serial.println("[SD] FOUT: Schrijftest bestand aanmaken mislukt!");
+        return false;
+    }
+    const char* testData = "NestboxCam SD test 1234567890";
+    size_t wr = t.print(testData);
+    t.close();
+    Serial.printf("[SD] Schrijftest: %u bytes geschreven\n", wr);
+
+    // Verifieer
+    File tr = SD_MMC.open(testPath, FILE_READ);
+    if (tr) {
+        Serial.printf("[SD] Schrijftest bestand grootte: %u bytes\n", (uint32_t)tr.size());
+        tr.close();
+        SD_MMC.remove(testPath);
+        Serial.println("[SD] Schrijftest OK");
+    } else {
+        Serial.println("[SD] FOUT: Schrijftest bestand niet terug te lezen!");
+        return false;
+    }
+
+    return true;
 }
 
 bool StorageManager::ensureVideoDir() {

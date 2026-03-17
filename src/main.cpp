@@ -137,35 +137,37 @@ void loop() {
 
         case State::RECORDING: {
             unsigned long now = millis();
+            uint32_t elapsed  = (uint32_t)(now - recStartMs) / 1000;
 
             // Opname tijdslimiet
             if (now - recStartMs >= (unsigned long)RECORD_DURATION_SEC * 1000) {
+                Serial.printf("[Main] Opnameduur bereikt (%u sec), stoppen\n", elapsed);
                 stopRecording();
                 break;
             }
 
             // Live stream voorkomt opname
             if (webServer.isStreaming) {
+                Serial.println("[Main] Stream actief, opname gestopt");
                 stopRecording();
                 break;
             }
 
-            // Frame timing – NIET static: reset bij elke opname via recStartMs vergelijking
             const unsigned long frameInterval = 1000 / CAM_FPS_TARGET;
             static unsigned long lastFrameMs = 0;
-
-            // Reset lastFrameMs bij start van een nieuwe opname
             if (lastFrameMs < recStartMs) lastFrameMs = recStartMs;
 
             if (now - lastFrameMs >= frameInterval) {
                 lastFrameMs = now;
 
                 camera_fb_t* fb = camera.captureFrame();
-                if (fb) {
-                    if (!recorder.writeFrame(fb->buf, fb->len)) {
-#if DEBUG_SERIAL
-                        Serial.println("[Main] Frame schrijven mislukt – opname stopt");
-#endif
+                if (!fb) {
+                    Serial.println("[Main] WAARSCHUWING: camera.captureFrame() gaf nullptr");
+                } else {
+                    if (fb->len == 0) {
+                        Serial.println("[Main] WAARSCHUWING: frame len=0");
+                    } else if (!recorder.writeFrame(fb->buf, fb->len)) {
+                        Serial.println("[Main] writeFrame mislukt – opname stopt");
                         camera.releaseFrame(fb);
                         stopRecording();
                         break;
@@ -176,9 +178,7 @@ void loop() {
 
             // SD ruimte bewaken
             if (!storage.hasEnoughSpace()) {
-#if DEBUG_SERIAL
                 Serial.println("[Main] SD bijna vol – opname stopt");
-#endif
                 stopRecording();
             }
             break;

@@ -16,12 +16,12 @@ public:
     const char* currentFile() const { return _filename; }
     uint32_t    frameCount()  const { return _frameCount; }
 
-    // Vaste header grootte: frames beginnen op byte 248
     static const uint32_t HEADER_SIZE = 248;
 
 private:
     File     _file;
     char     _filename[64];
+    char     _vfsPath[80];   // /sdcard + _filename voor fopen
     bool     _recording  = false;
     uint32_t _frameCount = 0;
     uint32_t _moviSize   = 0;
@@ -34,8 +34,6 @@ private:
     void writeU32LE(uint32_t v);
     void writeU16LE(uint16_t v);
     void writeFourCC(const char* cc);
-
-    // Bouwt een complete 248-byte AVI header in buf
     void buildAviHeader(uint8_t* buf, uint32_t w, uint32_t h,
-                        uint32_t totalFrames, uint32_t moviDataSize);
+                        uint32_t frames, uint32_t moviData);
 };

@@ -4,6 +4,7 @@
 #include <SD_MMC.h>
 #include <Arduino.h>
 #include <vector>
+#include <time.h>
 
 #if USE_HTTPS
 #include <HTTPConnection.hpp>
@@ -45,7 +46,20 @@ void WebServerManager::begin() {
     g_webManager = this;
     Serial.println("[Web] Self-signed certificaat genereren (kan ~30s duren)...");
     _cert = new SSLCert();
-    int r = createSelfSignedCert(*_cert, KEYSIZE_2048, "CN=NestboxCam.local,O=NestboxCam,C=NL", "20200101000000", "20301231235959");
+    // Geldigheid max 398 dagen i.v.m. browser/OS-beperkingen (Chrome, Apple)
+    const time_t maxValidDays = 398;
+    const time_t now = time(nullptr);
+    char notBefore[15] = "20200101000000";
+    char notAfter[15]  = "20210203235959";
+    if (now > 1609459200) {  // na 1 jan 2021: gebruik actuele tijd
+        struct tm t;
+        gmtime_r(&now, &t);
+        strftime(notBefore, sizeof(notBefore), "%Y%m%d%H%M%S", &t);
+        time_t end = now + (time_t)maxValidDays * 24 * 3600;
+        gmtime_r(&end, &t);
+        strftime(notAfter, sizeof(notAfter), "%Y%m%d%H%M%S", &t);
+    }
+    int r = createSelfSignedCert(*_cert, KEYSIZE_2048, "CN=NestboxCam.local,O=NestboxCam,C=NL", notBefore, notAfter);
     if (r != 0) {
         Serial.printf("[Web] Certificaat mislukt: 0x%02X\n", r);
         delete _cert; _cert = nullptr;

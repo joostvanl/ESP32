@@ -122,7 +122,7 @@ In de seriële log is dit zichtbaar als:
 
 ## HTTPS (optioneel)
 
-In `config.h` kun je **`USE_HTTPS`** op `1` zetten. De server draait dan op **poort 443** met een **self-signed certificaat** (gegenereerd bij elke start, eerste keer ca. 30 seconden). Geen beveiligingswaarschuwing meer bij download of afspelen; de browser vraagt één keer om het certificaat te vertrouwen (bijv. “Geavanceerd” → “Doorgaan naar …”).
+In `config.h` kun je **`USE_HTTPS`** op `1` zetten. De server draait dan op **poort 443** met een **self-signed certificaat** (gegenereerd bij elke start, eerste keer ca. 30 seconden). De geldigheid is **maximaal 398 dagen** (vereiste van o.a. Chrome en Apple). Geen beveiligingswaarschuwing meer bij download of afspelen; de browser vraagt één keer om het certificaat te vertrouwen (bijv. “Geavanceerd” → “Doorgaan naar …”).
 
 - **`USE_HTTPS 1`**: alleen HTTPS op poort 443 (aanbevolen).
 - **`USE_HTTPS 0`**: HTTP op poort 80, LED-API op poort 81 (oorspronkelijk gedrag).

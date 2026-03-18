@@ -59,14 +59,15 @@ void WebServerManager::begin() {
         gmtime_r(&end, &t);
         strftime(notAfter, sizeof(notAfter), "%Y%m%d%H%M%S", &t);
     }
-    int r = createSelfSignedCert(*_cert, KEYSIZE_2048, "CN=NestboxCam.local,O=NestboxCam,C=NL", notBefore, notAfter);
+    // KEYSIZE_1024 = minder RAM tijdens handshake (minder SSL_accept-fouten op ESP32-CAM)
+    int r = createSelfSignedCert(*_cert, KEYSIZE_1024, "CN=NestboxCam.local,O=NestboxCam,C=NL", notBefore, notAfter);
     if (r != 0) {
         Serial.printf("[Web] Certificaat mislukt: 0x%02X\n", r);
         delete _cert; _cert = nullptr;
         return;
     }
     Serial.println("[Web] Certificaat OK");
-    _secureServer = new HTTPSServer(_cert, WEB_PORT_HTTPS, 4);
+    _secureServer = new HTTPSServer(_cert, WEB_PORT_HTTPS, 2);  // 2 = minder gelijktijdige SSL-verbindingen, meer vrije heap
     ResourceNode* nRoot    = new ResourceNode("/", "GET", &wrapRoot);
     ResourceNode* nLive    = new ResourceNode("/live", "GET", &wrapLive);
     ResourceNode* nVideos  = new ResourceNode("/videos", "GET", &wrapVideos);

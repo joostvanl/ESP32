@@ -131,6 +131,10 @@ In `config.h` kun je **`USE_HTTPS`** op `1` zetten. De server draait dan op **po
 
 Bij nieuwere versies van de ESP32 Arduino core is dit headerbestand verplaatst. **PlatformIO:** een pre-build script past de library automatisch aan; gewoon opnieuw bouwen (`pio run`) is voldoende. **Arduino IDE:** open in je Arduino-libraries map het bestand `esp32_https_server/src/HTTPConnection.hpp` (of de .cpp waarin de include staat) en vervang `#include <hwcrypto/sha.h>` door `#include <esp32/sha.h>`.
 
+### Log: `SSL_accept failed. Aborting handshake`
+
+Door beperkt RAM op de ESP32-CAM kan de TLS-handshake soms mislukken. De browser probeert het opnieuw; vaak laadt de pagina na een paar pogingen wel. In de code is **1024-bit** certificaat en **max. 2 gelijktijdige HTTPS-verbindingen** ingesteld om het geheugengebruik te beperken. Blijft het probleem bestaan, probeer dan één tab en even wachten na het openen van de URL.
+
 ---
 
 ## Browser: download en afspelen

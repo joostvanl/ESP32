@@ -57,9 +57,12 @@ static const char HTML_DASHBOARD[] PROGMEM = R"rawhtml(
   .thumb-overlay{position:absolute;bottom:0;left:0;right:0;padding:.3rem .5rem;background:linear-gradient(transparent,rgba(0,0,0,.7));font-size:.65rem;color:rgba(255,255,255,.8);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .thumb-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:.8rem}
   .thumb-actions{padding:.4rem .75rem .6rem;display:flex;gap:.4rem}
+  .dl-toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(150%);opacity:0;transition:transform .35s ease,opacity .35s ease;z-index:9999;max-width:min(22rem,calc(100% - 2rem));padding:.85rem 1.25rem;background:var(--card);border:1px solid var(--accent2);border-radius:.5rem;box-shadow:0 12px 40px rgba(0,0,0,.45);font-size:.88rem;text-align:center;color:var(--text);pointer-events:none}
+  .dl-toast.show{transform:translateX(-50%) translateY(0);opacity:1}
 </style>
 </head>
 <body>
+<div id="dlToast" class="dl-toast" role="status" aria-live="polite"></div>
 <header>
   <div class="logo">Nestbox<span>Cam</span></div>
   <nav>
@@ -132,6 +135,14 @@ static const char HTML_DASHBOARD[] PROGMEM = R"rawhtml(
 <footer>NestboxCam &mdash; ESP32-CAM &bull; <span id="ipAddr"></span></footer>
 <script>
 var lastVideo = '';
+function setDlToast(text, autoHideMs){
+  var el = document.getElementById('dlToast');
+  if(!el) return;
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(window.__dlT);
+  if(autoHideMs) window.__dlT = setTimeout(function(){ el.classList.remove('show'); }, autoHideMs);
+}
 function hlRes(k){
   ['btnVga','btnSvga','btnXga'].forEach(function(id){
     var el = document.getElementById(id);
@@ -209,13 +220,21 @@ function updateThumbnail(name){
   document.getElementById('thumbActions').style.display = 'flex';
   var dlBtn = document.getElementById('thumbDl');
   dlBtn.onclick = function(){
-    fetch('/download?file=' + enc).then(function(r){ return r.blob(); })
+    setDlToast('Bestand wordt nu gedownload, een ogenblik.');
+    fetch('/download?file=' + enc).then(function(r){
+      if(!r.ok) throw new Error('http');
+      return r.blob();
+    })
       .then(function(blob){
+        setDlToast('Download gestart — controleer je downloadmap.', 4500);
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = name || 'bestand';
         a.click();
         URL.revokeObjectURL(a.href);
+      })
+      .catch(function(){
+        setDlToast('Download mislukt. Probeer het opnieuw.', 5000);
       });
   };
 }
@@ -369,9 +388,12 @@ static const char HTML_VIDEOS[] PROGMEM = R"rawhtml(
   .btn-dl:hover{background:rgba(34,211,238,.25)}
   .btn-del{background:rgba(248,113,113,.1);color:var(--danger);border:1px solid rgba(248,113,113,.25)}
   .btn-del:hover{background:rgba(248,113,113,.2)}
+  .dl-toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(150%);opacity:0;transition:transform .35s ease,opacity .35s ease;z-index:9999;max-width:min(22rem,calc(100% - 2rem));padding:.85rem 1.25rem;background:var(--card);border:1px solid var(--accent2);border-radius:.5rem;box-shadow:0 12px 40px rgba(0,0,0,.45);font-size:.88rem;text-align:center;color:var(--text);pointer-events:none}
+  .dl-toast.show{transform:translateX(-50%) translateY(0);opacity:1}
 </style>
 </head>
 <body>
+<div id="dlToast" class="dl-toast" role="status" aria-live="polite"></div>
 <header>
   <div class="logo">Nestbox<span>Cam</span></div>
   <nav>
@@ -398,6 +420,14 @@ static const char HTML_VIDEOS[] PROGMEM = R"rawhtml(
 </main>
 <script>
 var selected = {};
+function setDlToast(text, autoHideMs){
+  var el = document.getElementById('dlToast');
+  if(!el) return;
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(window.__dlT);
+  if(autoHideMs) window.__dlT = setTimeout(function(){ el.classList.remove('show'); }, autoHideMs);
+}
 
 function updateSelBar(){
   var keys = Object.keys(selected);
@@ -501,16 +531,21 @@ function loadVideos(){
 
 function downloadVideo(name){
   var enc = encodeURIComponent(name);
+  setDlToast('Bestand wordt nu gedownload, een ogenblik.');
   fetch('/download?file=' + enc)
-    .then(function(r){ return r.blob(); })
+    .then(function(r){
+      if(!r.ok) throw new Error('http');
+      return r.blob();
+    })
     .then(function(blob){
+      setDlToast('Download gestart — controleer je downloadmap.', 4500);
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = name || 'video.avi';
       a.click();
       URL.revokeObjectURL(a.href);
     })
-    .catch(function(){ alert('Download mislukt'); });
+    .catch(function(){ setDlToast('Download mislukt. Probeer het opnieuw.', 5000); });
 }
 
 function delVideo(name){

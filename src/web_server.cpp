@@ -1,6 +1,7 @@
 #include "web_server.h"
 #include "web_pages.h"
 #include "video_recorder.h"
+#include "app_settings.h"
 #include <SD_MMC.h>
 #include <Arduino.h>
 #include <vector>
@@ -22,6 +23,8 @@ static void wrapThumbnail(HTTPRequest* req, HTTPResponse* res) { g_webManager->h
 static void wrapApiStatus(HTTPRequest* req, HTTPResponse* res) { g_webManager->handleApiStatusHttps(req, res); }
 static void wrapApiVideos(HTTPRequest* req, HTTPResponse* res) { g_webManager->handleApiVideosHttps(req, res); }
 static void wrapApiLed(HTTPRequest* req, HTTPResponse* res) { g_webManager->handleApiLedHttps(req, res); }
+static void wrapApiSettings(HTTPRequest* req, HTTPResponse* res) { g_webManager->handleApiSettingsHttps(req, res); }
+static void wrapApiCapture(HTTPRequest* req, HTTPResponse* res) { g_webManager->handleApiCaptureHttps(req, res); }
 static void wrapNotFound(HTTPRequest* req, HTTPResponse* res) { g_webManager->handleNotFoundHttps(req, res); }
 #endif
 
@@ -79,6 +82,8 @@ void WebServerManager::begin() {
     ResourceNode* nStatus  = new ResourceNode("/api/status", "GET", &wrapApiStatus);
     ResourceNode* nApiVids = new ResourceNode("/api/videos", "GET", &wrapApiVideos);
     ResourceNode* nLed     = new ResourceNode("/api/led", "GET", &wrapApiLed);
+    ResourceNode* nSet     = new ResourceNode("/api/settings", "GET", &wrapApiSettings);
+    ResourceNode* nCap     = new ResourceNode("/api/capture", "GET", &wrapApiCapture);
     ResourceNode* n404     = new ResourceNode("", "GET", &wrapNotFound);
     _secureServer->registerNode(nRoot);
     _secureServer->registerNode(nLive);
@@ -91,6 +96,8 @@ void WebServerManager::begin() {
     _secureServer->registerNode(nStatus);
     _secureServer->registerNode(nApiVids);
     _secureServer->registerNode(nLed);
+    _secureServer->registerNode(nSet);
+    _secureServer->registerNode(nCap);
     _secureServer->setDefaultNode(n404);
     _secureServer->start();
 #if DEBUG_SERIAL
@@ -110,6 +117,8 @@ void WebServerManager::begin() {
     _server.on("/api/status",[this](){ handleApiStatus(); });
     _server.on("/api/videos",[this](){ handleApiVideos(); });
     _server.on("/api/led",   [this](){ handleApiLed(); });
+    _server.on("/api/settings",[this](){ handleApiSettings(); });
+    _server.on("/api/capture",[this](){ handleApiCapture(); });
     _server.onNotFound(      [this](){ handleNotFound(); });
     _server.begin();
     _ledServer.begin();
@@ -155,8 +164,8 @@ void WebServerManager::handleVideos() {
 }
 
 void WebServerManager::handlePlay() {
-    _server.sendHeader("Cache-Control", "no-cache");
-    _server.send_P(200, "text/html", HTML_PLAYER);
+    _server.sendHeader("Location", "/videos");
+    _server.send(302, "text/plain", "");
 }
 
 void WebServerManager::handleDelete() {
@@ -190,6 +199,11 @@ void WebServerManager::handleDownload() {
     String safeName = name;
     int lastSlash = name.lastIndexOf('/');
     if (lastSlash >= 0) safeName = name.substring(lastSlash + 1);
+    String mime = "application/octet-stream";
+    if (safeName.endsWith(".jpg") || safeName.endsWith(".jpeg") || safeName.endsWith(".JPG") || safeName.endsWith(".JPEG"))
+        mime = "image/jpeg";
+    else if (safeName.endsWith(".avi") || safeName.endsWith(".AVI"))
+        mime = "video/x-msvideo";
     String disposition = "inline; filename=\"" + safeName + "\"";
     _server.sendHeader("Content-Disposition", disposition);
     _server.sendHeader("Cache-Control", "no-cache");
@@ -219,7 +233,7 @@ void WebServerManager::handleDownload() {
         _server.sendHeader("Content-Range", "bytes " + String(rangeStart) + "-" + String(rangeEnd) + "/" + String(totalSize));
         _server.sendHeader("Content-Length", String(partLen));
         _server.setContentLength(partLen);
-        _server.send(206, "video/x-msvideo", "");
+        _server.send(206, mime.c_str(), "");
         if (!f.seek(rangeStart, SeekSet)) {
             f.close();
             return;
@@ -234,7 +248,7 @@ void WebServerManager::handleDownload() {
         }
     } else {
         _server.sendHeader("Content-Length", String(totalSize));
-        _server.streamFile(f, "video/x-msvideo");
+        _server.streamFile(f, mime.c_str());
     }
     f.close();
 }
@@ -306,6 +320,8 @@ void WebServerManager::handleApiStatus() {
     json += "\"used_mb\":"   + String((uint32_t)used_mb) + ",";
     json += "\"total_mb\":"  + String((uint32_t)total_mb) + ",";
     json += "\"video_count\":" + String(videos.size()) + ",";
+    json += "\"resolution\":\"" + String(appFrameSizeKey()) + "\",";
+    json += "\"record_sec\":" + String(appRecordDurationSec()) + ",";
     if (!videos.empty()) {
         json += "\"last_video\":\"" + videos[0].name + "\",";
     } else {
@@ -392,6 +408,20 @@ bool WebServerManager::extractFirstJpeg(const String& aviPath, std::vector<uint8
     return found;
 }
 
+bool WebServerManager::readJpegFile(const String& path, std::vector<uint8_t>& out) {
+    File f = SD_MMC.open(path.c_str(), FILE_READ);
+    if (!f || f.isDirectory()) return false;
+    size_t sz = f.size();
+    if (sz == 0 || sz > 2000000) {
+        f.close();
+        return false;
+    }
+    out.resize(sz);
+    size_t got = f.read(out.data(), sz);
+    f.close();
+    return got == sz && out.size() >= 2 && out[0] == 0xFF && out[1] == 0xD8;
+}
+
 #if !USE_HTTPS
 void WebServerManager::handleThumbnail() {
     if (!_server.hasArg("file")) {
@@ -402,6 +432,16 @@ void WebServerManager::handleThumbnail() {
     String path = buildFilePath(name);
 
     std::vector<uint8_t> jpeg;
+    if (name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".JPG") || name.endsWith(".JPEG")) {
+        if (readJpegFile(path, jpeg) && !jpeg.empty()) {
+            _server.sendHeader("Cache-Control", "max-age=300");
+            _server.sendHeader("Content-Length", String(jpeg.size()));
+            _server.setContentLength(jpeg.size());
+            _server.send(200, "image/jpeg", "");
+            _server.client().write(jpeg.data(), jpeg.size());
+            return;
+        }
+    }
     if (!extractFirstJpeg(path, jpeg) || jpeg.empty()) {
         // Stuur een 1x1 transparante pixel terug als fallback
         static const uint8_t EMPTY_JPEG[] = {
@@ -492,6 +532,93 @@ void WebServerManager::handleApiLed() {
     _server.send(200, "application/json",
                  String("{\"led\":") + (ledOn ? "true" : "false") + "}");
 }
+
+void WebServerManager::handleApiSettings() {
+    _server.sendHeader("Access-Control-Allow-Origin", "*");
+    _server.sendHeader("Cache-Control", "no-cache");
+
+    bool hasRes  = _server.hasArg("resolution");
+    bool hasDur  = _server.hasArg("record_sec");
+    if (!hasRes && !hasDur) {
+        String j = "{\"ok\":true,\"resolution\":\"" + String(appFrameSizeKey()) +
+                   "\",\"record_sec\":" + String(appRecordDurationSec()) + "}";
+        _server.send(200, "application/json", j);
+        return;
+    }
+
+    if (isRecording || isStreaming) {
+        _server.send(409, "application/json", "{\"ok\":false,\"error\":\"Opname of stream actief\"}");
+        return;
+    }
+
+    if (hasRes) {
+        String r = _server.arg("resolution");
+        if (!appSetFrameSizeFromKey(r.c_str())) {
+            _server.send(400, "application/json", "{\"ok\":false,\"error\":\"Ongeldige resolutie (vga,svga,xga)\"}");
+            return;
+        }
+        if (!_camera.setFrameSize(appFrameSize())) {
+            _server.send(500, "application/json", "{\"ok\":false,\"error\":\"Resolutie niet toegepast\"}");
+            return;
+        }
+    }
+    if (hasDur) {
+        uint32_t sec = (uint32_t)_server.arg("record_sec").toInt();
+        if (!appSetRecordDurationSec(sec)) {
+            _server.send(400, "application/json", "{\"ok\":false,\"error\":\"Geen geldige duur (10,20,30,60)\"}");
+            return;
+        }
+    }
+    _server.send(200, "application/json", "{\"ok\":true}");
+}
+
+void WebServerManager::handleApiCapture() {
+    _server.sendHeader("Access-Control-Allow-Origin", "*");
+    _server.sendHeader("Cache-Control", "no-cache");
+
+    if (isRecording || isStreaming) {
+        _server.send(503, "application/json", "{\"ok\":false,\"error\":\"Camera bezig\"}");
+        return;
+    }
+    if (!_camera.isReady()) {
+        _server.send(503, "application/json", "{\"ok\":false,\"error\":\"Camera niet gereed\"}");
+        return;
+    }
+    if (!_storage.hasEnoughSpace()) {
+        _server.send(503, "application/json", "{\"ok\":false,\"error\":\"Onvoldoende ruimte\"}");
+        return;
+    }
+
+    String fullPath = _storage.newPhotoFilename();
+    camera_fb_t* fb = _camera.captureFrame();
+    if (!fb || fb->len == 0) {
+        if (fb) _camera.releaseFrame(fb);
+        _server.send(500, "application/json", "{\"ok\":false,\"error\":\"Geen frame\"}");
+        return;
+    }
+
+    File f = SD_MMC.open(fullPath.c_str(), FILE_WRITE);
+    if (!f) {
+        _camera.releaseFrame(fb);
+        _server.send(500, "application/json", "{\"ok\":false,\"error\":\"SD schrijffout\"}");
+        return;
+    }
+    size_t flen = fb->len;
+    size_t wr = f.write(fb->buf, flen);
+    f.close();
+    _camera.releaseFrame(fb);
+
+    if (wr != flen) {
+        SD_MMC.remove(fullPath.c_str());
+        _server.send(500, "application/json", "{\"ok\":false,\"error\":\"Onvolledige schrijf\"}");
+        return;
+    }
+
+    int slash = fullPath.lastIndexOf('/');
+    String base = (slash >= 0) ? fullPath.substring(slash + 1) : fullPath;
+    String json = "{\"ok\":true,\"file\":\"" + base + "\"}";
+    _server.send(200, "application/json", json);
+}
 #endif
 
 // ─── HTTPS handlers ───────────────────────────────────────────────────────────
@@ -523,9 +650,10 @@ void WebServerManager::handleVideosHttps(HTTPRequest* req, HTTPResponse* res) {
 }
 
 void WebServerManager::handlePlayHttps(HTTPRequest* req, HTTPResponse* res) {
-    res->setHeader("Cache-Control", "no-cache");
-    res->setHeader("Content-Type", "text/html; charset=utf-8");
-    sendProgmem(res, HTML_PLAYER);
+    res->setStatusCode(302);
+    res->setHeader("Location", "/videos");
+    res->setHeader("Content-Type", "text/plain");
+    res->printStd("");
 }
 
 void WebServerManager::handleDeleteHttps(HTTPRequest* req, HTTPResponse* res) {
@@ -565,6 +693,11 @@ void WebServerManager::handleDownloadHttps(HTTPRequest* req, HTTPResponse* res) 
     size_t totalSize = f.size();
     int lastSlash = name.lastIndexOf('/');
     String safeName = lastSlash >= 0 ? name.substring(lastSlash + 1) : name;
+    const char* mime = "application/octet-stream";
+    if (safeName.endsWith(".jpg") || safeName.endsWith(".jpeg") || safeName.endsWith(".JPG") || safeName.endsWith(".JPEG"))
+        mime = "image/jpeg";
+    else if (safeName.endsWith(".avi") || safeName.endsWith(".AVI"))
+        mime = "video/x-msvideo";
     res->setHeader("Content-Disposition", ("inline; filename=\"" + safeName + "\"").c_str());
     res->setHeader("Cache-Control", "no-cache");
     res->setHeader("X-Content-Type-Options", "nosniff");
@@ -593,7 +726,7 @@ void WebServerManager::handleDownloadHttps(HTTPRequest* req, HTTPResponse* res) 
         res->setStatusText("Partial Content");
         res->setHeader("Content-Range", ("bytes " + String(rangeStart) + "-" + String(rangeEnd) + "/" + String(totalSize)).c_str());
         res->setHeader("Content-Length", String(partLen).c_str());
-        res->setHeader("Content-Type", "video/x-msvideo");
+        res->setHeader("Content-Type", mime);
         if (f.seek(rangeStart, SeekSet)) {
             uint8_t buf[512];
             while (partLen && f.available()) {
@@ -606,7 +739,7 @@ void WebServerManager::handleDownloadHttps(HTTPRequest* req, HTTPResponse* res) 
         }
     } else {
         res->setHeader("Content-Length", String(totalSize).c_str());
-        res->setHeader("Content-Type", "video/x-msvideo");
+        res->setHeader("Content-Type", mime);
         uint8_t buf[512];
         while (f.available()) {
             size_t n = f.read(buf, sizeof(buf));
@@ -680,6 +813,15 @@ void WebServerManager::handleThumbnailHttps(HTTPRequest* req, HTTPResponse* res)
     String name = String(val.c_str());
     String path = buildFilePath(name);
     std::vector<uint8_t> jpeg;
+    if (name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".JPG") || name.endsWith(".JPEG")) {
+        if (readJpegFile(path, jpeg) && !jpeg.empty()) {
+            res->setHeader("Cache-Control", "max-age=300");
+            res->setHeader("Content-Type", "image/jpeg");
+            res->setHeader("Content-Length", String(jpeg.size()).c_str());
+            res->write(jpeg.data(), jpeg.size());
+            return;
+        }
+    }
     if (!extractFirstJpeg(path, jpeg) || jpeg.empty()) {
         static const uint8_t EMPTY_JPEG[] = {
             0xFF,0xD8,0xFF,0xE0,0x00,0x10,0x4A,0x46,0x49,0x46,0x00,0x01,
@@ -725,6 +867,8 @@ void WebServerManager::handleApiStatusHttps(HTTPRequest* req, HTTPResponse* res)
     json += "\"used_mb\":"   + String((uint32_t)used_mb) + ",";
     json += "\"total_mb\":"  + String((uint32_t)total_mb) + ",";
     json += "\"video_count\":" + String(videos.size()) + ",";
+    json += "\"resolution\":\"" + String(appFrameSizeKey()) + "\",";
+    json += "\"record_sec\":" + String(appRecordDurationSec()) + ",";
     if (!videos.empty()) json += "\"last_video\":\"" + videos[0].name + "\",";
     else json += "\"last_video\":\"\",";
     json += "\"ip\":\"" + WiFi.localIP().toString() + "\"";
@@ -763,6 +907,106 @@ void WebServerManager::handleApiLedHttps(HTTPRequest* req, HTTPResponse* res) {
     res->setHeader("Cache-Control", "no-cache");
     res->setHeader("Content-Type", "application/json");
     res->print(ledOn ? "{\"led\":true}" : "{\"led\":false}");
+}
+
+void WebServerManager::handleApiSettingsHttps(HTTPRequest* req, HTTPResponse* res) {
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Cache-Control", "no-cache");
+    res->setHeader("Content-Type", "application/json");
+
+    std::string resVal, durVal;
+    bool hasRes = req->getParams()->getQueryParameter("resolution", resVal);
+    bool hasDur = req->getParams()->getQueryParameter("record_sec", durVal);
+
+    if (!hasRes && !hasDur) {
+        String j = "{\"ok\":true,\"resolution\":\"" + String(appFrameSizeKey()) +
+                   "\",\"record_sec\":" + String(appRecordDurationSec()) + "}";
+        res->print(j.c_str());
+        return;
+    }
+
+    if (isRecording || isStreaming) {
+        res->setStatusCode(409);
+        res->printStd("{\"ok\":false,\"error\":\"Opname of stream actief\"}");
+        return;
+    }
+
+    if (hasRes) {
+        if (!appSetFrameSizeFromKey(resVal.c_str())) {
+            res->setStatusCode(400);
+            res->printStd("{\"ok\":false,\"error\":\"Ongeldige resolutie (vga,svga,xga)\"}");
+            return;
+        }
+        if (!_camera.setFrameSize(appFrameSize())) {
+            res->setStatusCode(500);
+            res->printStd("{\"ok\":false,\"error\":\"Resolutie niet toegepast\"}");
+            return;
+        }
+    }
+    if (hasDur) {
+        uint32_t sec = (uint32_t)atoi(durVal.c_str());
+        if (!appSetRecordDurationSec(sec)) {
+            res->setStatusCode(400);
+            res->printStd("{\"ok\":false,\"error\":\"Geen geldige duur (10,20,30,60)\"}");
+            return;
+        }
+    }
+    res->printStd("{\"ok\":true}");
+}
+
+void WebServerManager::handleApiCaptureHttps(HTTPRequest* req, HTTPResponse* res) {
+    res->setHeader("Access-Control-Allow-Origin", "*");
+    res->setHeader("Cache-Control", "no-cache");
+    res->setHeader("Content-Type", "application/json");
+
+    if (isRecording || isStreaming) {
+        res->setStatusCode(503);
+        res->printStd("{\"ok\":false,\"error\":\"Camera bezig\"}");
+        return;
+    }
+    if (!_camera.isReady()) {
+        res->setStatusCode(503);
+        res->printStd("{\"ok\":false,\"error\":\"Camera niet gereed\"}");
+        return;
+    }
+    if (!_storage.hasEnoughSpace()) {
+        res->setStatusCode(503);
+        res->printStd("{\"ok\":false,\"error\":\"Onvoldoende ruimte\"}");
+        return;
+    }
+
+    String fullPath = _storage.newPhotoFilename();
+    camera_fb_t* fb = _camera.captureFrame();
+    if (!fb || fb->len == 0) {
+        if (fb) _camera.releaseFrame(fb);
+        res->setStatusCode(500);
+        res->printStd("{\"ok\":false,\"error\":\"Geen frame\"}");
+        return;
+    }
+
+    File f = SD_MMC.open(fullPath.c_str(), FILE_WRITE);
+    if (!f) {
+        _camera.releaseFrame(fb);
+        res->setStatusCode(500);
+        res->printStd("{\"ok\":false,\"error\":\"SD schrijffout\"}");
+        return;
+    }
+    size_t flen = fb->len;
+    size_t wr = f.write(fb->buf, flen);
+    f.close();
+    _camera.releaseFrame(fb);
+
+    if (wr != flen) {
+        SD_MMC.remove(fullPath.c_str());
+        res->setStatusCode(500);
+        res->printStd("{\"ok\":false,\"error\":\"Onvolledige schrijf\"}");
+        return;
+    }
+
+    int slash = fullPath.lastIndexOf('/');
+    String base = (slash >= 0) ? fullPath.substring(slash + 1) : fullPath;
+    String json = "{\"ok\":true,\"file\":\"" + base + "\"}";
+    res->print(json.c_str());
 }
 
 void WebServerManager::handleNotFoundHttps(HTTPRequest* req, HTTPResponse* res) {

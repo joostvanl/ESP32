@@ -23,8 +23,9 @@ public:
 
     // Genereer unieke bestandsnaam op basis van tijd
     String      newVideoFilename() const;
+    String      newPhotoFilename() const;
 
-    // Lijst van video's (gesorteerd, nieuwste eerst)
+    // Lijst van video's en foto's in /videos (gesorteerd, nieuwste eerst)
     std::vector<VideoFile> listVideos();
 
     bool deleteVideo(const char* filename);

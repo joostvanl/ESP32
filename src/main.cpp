@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "config.h"
+#include "app_settings.h"
 #include "wifi_manager.h"
 #include "camera_control.h"
 #include "motion_detection.h"
@@ -40,7 +41,9 @@ void startRecording() {
     }
 
     String filename = storage.newVideoFilename();
-    if (!recorder.begin(filename.c_str())) return;
+    uint16_t fw, fh;
+    framesizeToPixels(appFrameSize(), fw, fh);
+    if (!recorder.begin(filename.c_str(), fw, fh)) return;
 
 #if IR_LED_ENABLED
     camera.setIrLed(true);
@@ -79,6 +82,8 @@ void setup() {
     delay(500);
     Serial.println("\n=== NestboxCam opstarten ===");
 #endif
+
+    appSettingsInit();
 
     // SD-kaart EERST initialiseren (vóór camera)
     // AI Thinker ESP32-CAM: GPIO 4 = flash LED én SD_MMC HS2_DATA1
@@ -142,7 +147,7 @@ void loop() {
             uint32_t elapsed  = (uint32_t)(now - recStartMs) / 1000;
 
             // Opname tijdslimiet
-            if (now - recStartMs >= (unsigned long)RECORD_DURATION_SEC * 1000) {
+            if (now - recStartMs >= (unsigned long)appRecordDurationSec() * 1000) {
                 Serial.printf("[Main] Opnameduur bereikt (%u sec), stoppen\n", elapsed);
                 stopRecording();
                 break;

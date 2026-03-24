@@ -65,7 +65,7 @@ static const char HTML_DASHBOARD[] PROGMEM = R"rawhtml(
   <nav>
     <a href="/" class="active">Dashboard</a>
     <a href="/live">Live</a>
-    <a href="/videos">Video's</a>
+    <a href="/videos">Galerij</a>
   </nav>
 </header>
 <main>
@@ -86,19 +86,39 @@ static const char HTML_DASHBOARD[] PROGMEM = R"rawhtml(
       <div style="font-size:.75rem;color:var(--muted)" id="storageDetail">— / —</div>
     </div>
     <div class="card">
-      <div class="card-label">Opgenomen video's</div>
+      <div class="card-label">Bestanden op SD</div>
       <div class="card-value blue" id="videoCount">—</div>
     </div>
   </div>
 
-  <h2>Laatste opname</h2>
+  <h2>Camera &amp; opname</h2>
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="card-label">Resolutie</div>
+    <div class="actions" style="margin-top:.5rem">
+      <button type="button" class="btn btn-secondary" id="btnVga" onclick="setRes('vga')">VGA 640×480</button>
+      <button type="button" class="btn btn-secondary" id="btnSvga" onclick="setRes('svga')">SVGA 800×600</button>
+      <button type="button" class="btn btn-secondary" id="btnXga" onclick="setRes('xga')">XGA 1024×768</button>
+    </div>
+    <div class="card-label" style="margin-top:1rem">Opnameduur (PIR)</div>
+    <div class="actions" style="margin-top:.5rem">
+      <button type="button" class="btn btn-secondary" id="btnD10" onclick="setDur(10)">10 s</button>
+      <button type="button" class="btn btn-secondary" id="btnD20" onclick="setDur(20)">20 s</button>
+      <button type="button" class="btn btn-secondary" id="btnD30" onclick="setDur(30)">30 s</button>
+      <button type="button" class="btn btn-secondary" id="btnD60" onclick="setDur(60)">60 s</button>
+    </div>
+    <div class="actions" style="margin-top:1rem">
+      <button type="button" class="btn btn-primary" onclick="doCapture()">&#128247; Foto maken</button>
+    </div>
+    <p style="font-size:.75rem;color:var(--muted);margin-top:.75rem">Resolutie wijzigen gaat niet tijdens live stream of opname.</p>
+  </div>
+
+  <h2>Laatste bestand</h2>
   <div class="thumb-card" id="thumbCard">
-    <div class="card-label">Meest recente video</div>
+    <div class="card-label">Meest recente video of foto</div>
     <div class="thumb-wrap" id="thumbWrap">
-      <div class="thumb-empty" id="thumbEmpty">Nog geen video's opgeslagen</div>
+      <div class="thumb-empty" id="thumbEmpty">Nog geen bestanden opgeslagen</div>
     </div>
     <div class="thumb-actions" id="thumbActions" style="display:none">
-      <a href="#" id="thumbPlay" class="btn btn-primary">&#9654; Afspelen</a>
       <button type="button" id="thumbDl" class="btn btn-secondary">&#8681; Download</button>
     </div>
   </div>
@@ -106,12 +126,51 @@ static const char HTML_DASHBOARD[] PROGMEM = R"rawhtml(
   <h2 style="margin-top:2rem">Acties</h2>
   <div class="actions">
     <a href="/live" class="btn btn-primary">&#9654; Live bekijken</a>
-    <a href="/videos" class="btn btn-secondary">&#128249; Video's</a>
+    <a href="/videos" class="btn btn-secondary">&#128249; Galerij</a>
   </div>
 </main>
 <footer>NestboxCam &mdash; ESP32-CAM &bull; <span id="ipAddr"></span></footer>
 <script>
 var lastVideo = '';
+function hlRes(k){
+  ['btnVga','btnSvga','btnXga'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.className = 'btn btn-secondary';
+  });
+  var map = {vga:'btnVga',svga:'btnSvga',xga:'btnXga'};
+  var bid = map[k];
+  if(bid && document.getElementById(bid)) document.getElementById(bid).className = 'btn btn-primary';
+}
+function hlDur(s){
+  ['btnD10','btnD20','btnD30','btnD60'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.className = 'btn btn-secondary';
+  });
+  var map = {10:'btnD10',20:'btnD20',30:'btnD30',60:'btnD60'};
+  var bid = map[s];
+  if(bid && document.getElementById(bid)) document.getElementById(bid).className = 'btn btn-primary';
+}
+function setRes(key){
+  fetch('/api/settings?resolution='+encodeURIComponent(key)).then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.ok){ hlRes(key); }
+      else alert(d.error || 'Instellen mislukt');
+    }).catch(function(){ alert('Netwerkfout'); });
+}
+function setDur(sec){
+  fetch('/api/settings?record_sec='+sec).then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.ok){ hlDur(sec); }
+      else alert(d.error || 'Instellen mislukt');
+    }).catch(function(){ alert('Netwerkfout'); });
+}
+function doCapture(){
+  fetch('/api/capture').then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.ok){ fetchStatus(); }
+      else alert(d.error || 'Foto mislukt');
+    }).catch(function(){ alert('Netwerkfout'); });
+}
 function fetchStatus(){
   fetch('/api/status').then(r=>r.json()).then(d=>{
     document.getElementById('camStatus').textContent = d.camera ? 'OK' : 'Fout';
@@ -120,6 +179,8 @@ function fetchStatus(){
     document.getElementById('storageDetail').textContent = d.used_mb + ' MB gebruikt van ' + d.total_mb + ' MB';
     document.getElementById('videoCount').textContent = d.video_count;
     document.getElementById('ipAddr').textContent = d.ip;
+    if(d.resolution) hlRes(d.resolution);
+    if(d.record_sec) hlDur(d.record_sec);
     var pct = d.total_mb > 0 ? (d.used_mb / d.total_mb * 100) : 0;
     var fill = document.getElementById('storageFill');
     fill.style.width = pct + '%';
@@ -146,14 +207,13 @@ function updateThumbnail(name){
     '<div class="thumb-overlay">' + name + '</div>';
   document.getElementById('thumbEmpty').style.display = 'none';
   document.getElementById('thumbActions').style.display = 'flex';
-  document.getElementById('thumbPlay').href = '/play?file=' + enc;
   var dlBtn = document.getElementById('thumbDl');
   dlBtn.onclick = function(){
     fetch('/download?file=' + enc).then(function(r){ return r.blob(); })
       .then(function(blob){
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = name || 'video.avi';
+        a.download = name || 'bestand';
         a.click();
         URL.revokeObjectURL(a.href);
       });
@@ -317,15 +377,15 @@ static const char HTML_VIDEOS[] PROGMEM = R"rawhtml(
   <nav>
     <a href="/">Dashboard</a>
     <a href="/live">Live</a>
-    <a href="/videos" class="active">Video's</a>
+    <a href="/videos" class="active">Galerij</a>
   </nav>
 </header>
 <main>
-  <h2>Opgeslagen video's</h2>
+  <h2>Opgeslagen bestanden</h2>
   <div class="storage-info">
     <span><span class="si-label">Vrij:</span><span id="siFreq">—</span></span>
     <span><span class="si-label">Totaal:</span><span id="siTotal">—</span></span>
-    <span><span class="si-label">Video's:</span><span id="siCount">—</span></span>
+    <span><span class="si-label">Aantal:</span><span id="siCount">—</span></span>
   </div>
   <!-- Selectie-toolbar (verschijnt bij selectie) -->
   <div class="sel-bar" id="selBar">
@@ -382,12 +442,12 @@ function selectNone(){
 function deleteSelected(){
   var names = Object.keys(selected);
   if(names.length === 0) return;
-  if(!confirm(names.length + ' video(\'s) verwijderen?')) return;
+  if(!confirm(names.length + ' bestand(en) verwijderen?')) return;
   var todo = names.slice();
   var failed = 0;
   function next(){
     if(todo.length === 0){
-      if(failed > 0) alert(failed + ' video(\'s) konden niet worden verwijderd.');
+      if(failed > 0) alert(failed + ' bestand(en) konden niet worden verwijderd.');
       selected = {};
       loadVideos();
       return;
@@ -408,7 +468,7 @@ function loadVideos(){
     document.getElementById('siCount').textContent = data.videos.length;
     var el = document.getElementById('videoList');
     if(data.videos.length === 0){
-      el.innerHTML = '<div class="empty">Geen video\'s opgeslagen.</div>';
+      el.innerHTML = '<div class="empty">Geen bestanden opgeslagen.</div>';
       updateSelBar();
       return;
     }
@@ -429,7 +489,6 @@ function loadVideos(){
           '<div class="vid-size">' + v.size + '</div>' +
         '</div>' +
         '<div class="vid-actions" onclick="event.stopPropagation()">' +
-          '<a href="/play?file=' + fn + '" class="btn btn-play">&#9654;</a>' +
           '<button type="button" onclick="downloadVideo(\'' + esc + '\')" class="btn btn-dl">&#8681;</button>' +
           '<button onclick="delVideo(\'' + esc + '\')" class="btn btn-del">&#128465;</button>' +
         '</div>' +
@@ -455,7 +514,7 @@ function downloadVideo(name){
 }
 
 function delVideo(name){
-  if(!confirm('Video verwijderen:\n' + name + '?')) return;
+  if(!confirm('Bestand verwijderen:\n' + name + '?')) return;
   fetch('/delete?file=' + encodeURIComponent(name))
     .then(r=>r.json()).then(d=>{
       if(d.ok){ delete selected[name]; loadVideos(); }
@@ -469,96 +528,3 @@ loadVideos();
 </html>
 )rawhtml";
 
-// ─── Video player pagina ──────────────────────────────────────────────────────
-static const char HTML_PLAYER[] PROGMEM = R"rawhtml(
-<!DOCTYPE html>
-<html lang="nl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NestboxCam – Afspelen</title>
-<style>
-  :root{--bg:#0f1117;--card:#1a1d27;--accent:#4ade80;--accent2:#22d3ee;--text:#e2e8f0;--muted:#64748b;--border:#2d3148}
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column}
-  header{background:var(--card);border-bottom:1px solid var(--border);padding:1rem 1.5rem;display:flex;align-items:center;gap:1rem}
-  .logo{font-size:1.4rem;font-weight:700;color:var(--accent)}
-  .logo span{color:var(--accent2)}
-  nav a{color:var(--muted);text-decoration:none;padding:.4rem .8rem;border-radius:.4rem;font-size:.9rem;transition:all .2s}
-  nav a:hover{color:var(--text);background:rgba(255,255,255,.06)}
-  nav{display:flex;gap:.25rem;margin-left:auto}
-  .player-wrap{flex:1;display:flex;flex-direction:column;align-items:center;padding:1.5rem;gap:1rem}
-  video{max-width:800px;width:100%;border-radius:.75rem;border:2px solid var(--border);background:#000}
-  .meta{color:var(--muted);font-size:.85rem;font-family:monospace}
-  .btn{display:inline-flex;align-items:center;gap:.4rem;padding:.5rem 1rem;border-radius:.5rem;border:none;cursor:pointer;font-size:.85rem;font-weight:600;text-decoration:none;transition:all .2s}
-  .btn-primary{background:var(--accent);color:#0f1117}
-  .btn-primary:hover{background:#22c55e}
-  .btn-secondary{background:var(--card);color:var(--text);border:1px solid var(--border)}
-  .btn-secondary:hover{background:rgba(255,255,255,.06)}
-  .actions{display:flex;gap:.75rem}
-  .info-box{background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.2);color:var(--accent2);padding:.75rem 1rem;border-radius:.5rem;font-size:.82rem;max-width:600px;width:100%}
-</style>
-</head>
-<body>
-<header>
-  <div class="logo">Nestbox<span>Cam</span></div>
-  <nav>
-    <a href="/">Dashboard</a>
-    <a href="/live">Live</a>
-    <a href="/videos">Video's</a>
-  </nav>
-</header>
-<div class="player-wrap">
-  <div class="info-box">&#8505; Video wordt via een veilige blob geladen (geen beveiligingsmelding). Werkt afspelen niet, gebruik dan Download en open met VLC.</div>
-  <div id="loadStatus" class="meta">Laden...</div>
-  <video id="player" controls autoplay style="display:none">
-    <source id="vsrc" src="" type="video/x-msvideo">
-    Uw browser ondersteunt deze video niet.
-  </video>
-  <div class="meta" id="fname">—</div>
-  <div class="actions">
-    <button type="button" id="dlbtn" class="btn btn-primary">&#8681; Download</button>
-    <a href="/videos" class="btn btn-secondary">&#8592; Terug</a>
-  </div>
-</div>
-<script>
-var params = new URLSearchParams(window.location.search);
-var file = params.get('file') || '';
-var enc = encodeURIComponent(file);
-var videoBlobUrl = null;
-document.getElementById('fname').textContent = file;
-
-function revokeBlob(){ if(videoBlobUrl){ URL.revokeObjectURL(videoBlobUrl); videoBlobUrl = null; } }
-
-fetch('/download?file=' + enc)
-  .then(function(r){ if(!r.ok) throw new Error(r.status); return r.blob(); })
-  .then(function(blob){
-    revokeBlob();
-    videoBlobUrl = URL.createObjectURL(blob);
-    var v = document.getElementById('player');
-    var s = document.getElementById('vsrc');
-    s.src = videoBlobUrl;
-    v.style.display = 'block';
-    document.getElementById('loadStatus').style.display = 'none';
-    v.load();
-    v.play().catch(function(){});
-  })
-  .catch(function(){ document.getElementById('loadStatus').textContent = 'Laden mislukt. Gebruik Download en open met VLC.'; });
-
-document.getElementById('dlbtn').onclick = function(){
-  fetch('/download?file=' + enc)
-    .then(function(r){ return r.blob(); })
-    .then(function(blob){
-      var a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = file || 'video.avi';
-      a.click();
-      URL.revokeObjectURL(a.href);
-    });
-};
-
-window.addEventListener('beforeunload', revokeBlob);
-</script>
-</body>
-</html>
-)rawhtml";

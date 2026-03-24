@@ -1,4 +1,5 @@
 #include "camera_control.h"
+#include "app_settings.h"
 #include <Arduino.h>
 
 bool CameraControl::begin() {
@@ -23,7 +24,7 @@ bool CameraControl::begin() {
     cfg.pin_reset    = CAM_PIN_RESET;
     cfg.xclk_freq_hz = 20000000;
     cfg.pixel_format = PIXFORMAT_JPEG;
-    cfg.frame_size   = CAM_FRAME_SIZE;
+    cfg.frame_size   = appFrameSize();
     cfg.jpeg_quality = CAM_QUALITY;
 
     // Met PSRAM meer frame buffers voor betere prestaties
@@ -88,4 +89,12 @@ void CameraControl::releaseFrame(camera_fb_t* fb) {
 
 void CameraControl::setIrLed(bool on) {
     digitalWrite(IR_LED_PIN, on ? HIGH : LOW);
+}
+
+bool CameraControl::setFrameSize(framesize_t fs) {
+    if (!_ready) return false;
+    sensor_t* s = esp_camera_sensor_get();
+    if (!s) return false;
+    int err = s->set_framesize(s, fs);
+    return err == 0;
 }

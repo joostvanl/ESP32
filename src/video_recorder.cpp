@@ -176,7 +176,7 @@ void VideoRecorder::buildAviHeader(uint8_t* b, uint32_t w, uint32_t h,
 
 // ─── Opname starten ───────────────────────────────────────────────────────────
 
-bool VideoRecorder::begin(const char* filename) {
+bool VideoRecorder::begin(const char* filename, uint32_t frameWidth, uint32_t frameHeight) {
     if (_recording) finish();
 
     strncpy(_filename, filename, sizeof(_filename)-1);
@@ -185,7 +185,8 @@ bool VideoRecorder::begin(const char* filename) {
     _moviSize   = 0;
     _startMs    = millis();
 
-    Serial.printf("[REC] begin() → %s\n", _filename);
+    Serial.printf("[REC] begin() → %s (%ux%u)\n", _filename,
+                  (unsigned)frameWidth, (unsigned)frameHeight);
     Serial.printf("[REC] Vrij heap: %u bytes\n", (uint32_t)ESP.getFreeHeap());
 
     snprintf(_vfsPath, sizeof(_vfsPath), "/sdcard%s", _filename);
@@ -199,7 +200,7 @@ bool VideoRecorder::begin(const char* filename) {
     Serial.printf("[REC] Bestand geopend, positie=%u\n", (uint32_t)_file.position());
 
     uint8_t hdr[HEADER_SIZE];
-    buildAviHeader(hdr, CAM_FRAME_WIDTH, CAM_FRAME_HEIGHT, 0, 0);
+    buildAviHeader(hdr, frameWidth, frameHeight, 0, 0);
     size_t wr = _file.write(hdr, HEADER_SIZE);
 
     Serial.printf("[REC] Header geschreven: %u/%u bytes, positie=%u\n",

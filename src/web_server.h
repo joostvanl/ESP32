@@ -42,6 +42,8 @@ public:
     void handleApiStatusHttps(httpsserver::HTTPRequest* req, httpsserver::HTTPResponse* res);
     void handleApiVideosHttps(httpsserver::HTTPRequest* req, httpsserver::HTTPResponse* res);
     void handleApiLedHttps(httpsserver::HTTPRequest* req, httpsserver::HTTPResponse* res);
+    void handleApiSettingsHttps(httpsserver::HTTPRequest* req, httpsserver::HTTPResponse* res);
+    void handleApiCaptureHttps(httpsserver::HTTPRequest* req, httpsserver::HTTPResponse* res);
     void handleNotFoundHttps(httpsserver::HTTPRequest* req, httpsserver::HTTPResponse* res);
 #endif
 
@@ -68,9 +70,12 @@ private:
     void handleApiStatus();
     void handleApiVideos();
     void handleApiLed();
+    void handleApiSettings();
+    void handleApiCapture();
     void handleNotFound();
 #endif
 
     String buildFilePath(const String& name);
     bool   extractFirstJpeg(const String& aviPath, std::vector<uint8_t>& out);
+    bool   readJpegFile(const String& path, std::vector<uint8_t>& out);
 };

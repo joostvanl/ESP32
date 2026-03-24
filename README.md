@@ -87,7 +87,9 @@ Wanneer je de resolutie wijzigt, moet je **beide** onderstaande defines tegelijk
 #define CAM_FRAME_HEIGHT 480            // hoogte in pixels
 ```
 
-> **Belangrijk:** `CAM_FRAME_WIDTH` en `CAM_FRAME_HEIGHT` worden gebruikt voor de AVI-header. Als ze niet overeenkomen met `CAM_FRAME_SIZE` wordt de video verkeerd opgeslagen.
+> **Belangrijk:** Bij alleen firmware-instellingen (`config.h`) moeten `CAM_FRAME_SIZE` en de bijbehorende afmetingen kloppen. **Via het dashboard** kun je VGA, SVGA of XGA kiezen; de firmware zet dan zowel de sensor als de AVI-header correct (geen handmatige width/height nodig).
+
+**Via de webinterface (dashboard):** knoppen voor **VGA** (640×480), **SVGA** (800×600) en **XGA** (1024×768), plus opnameduur **10 / 20 / 30 / 60** seconden voor PIR-opname. Er is een knop **Foto maken**; foto’s worden als `photo_YYYY-MM-DD_HH-MM-SS.jpg` in `/videos` gezet en verschijnen in de galerij (download en verwijderen net als video’s). Afspelen van opgenomen video in de browser is uitgeschakeld; gebruik download en bijvoorbeeld VLC. **API:** `GET /api/settings` (huidige waarden), `GET /api/settings?resolution=vga|svga|xga&record_sec=10|20|30|60` (wijzigen; niet tijdens opname of live stream), `GET /api/capture` (foto opslaan).
 
 Beschikbare resoluties:
 

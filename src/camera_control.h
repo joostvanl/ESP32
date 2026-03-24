@@ -16,6 +16,9 @@ public:
     // Schakel IR LED aan/uit
     void setIrLed(bool on);
 
+    // Wijzig resolutie (VGA / SVGA / XGA); faalt als sensor niet geïnitialiseerd is
+    bool setFrameSize(framesize_t fs);
+
 private:
     bool _ready = false;
 };

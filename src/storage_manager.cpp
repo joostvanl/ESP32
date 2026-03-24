@@ -98,6 +98,30 @@ String StorageManager::newVideoFilename() const {
     return String(buf);
 }
 
+String StorageManager::newPhotoFilename() const {
+    struct tm ti;
+    if (getLocalTime(&ti)) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%s/photo_%04d-%02d-%02d_%02d-%02d-%02d.jpg",
+            VIDEO_DIR,
+            ti.tm_year + 1900, ti.tm_mon + 1, ti.tm_mday,
+            ti.tm_hour, ti.tm_min, ti.tm_sec);
+        return String(buf);
+    }
+    char buf[48];
+    snprintf(buf, sizeof(buf), "%s/photo_%lu.jpg", VIDEO_DIR, millis());
+    return String(buf);
+}
+
+static bool isSafeMediaName(const String& name) {
+    if (name.length() == 0 || name.length() > 120) return false;
+    if (name.indexOf("..") >= 0 || name.indexOf('/') >= 0 || name.indexOf('\\') >= 0)
+        return false;
+    return name.endsWith(".avi") || name.endsWith(".AVI") ||
+           name.endsWith(".jpg") || name.endsWith(".JPG") ||
+           name.endsWith(".jpeg") || name.endsWith(".JPEG");
+}
+
 std::vector<VideoFile> StorageManager::listVideos() {
     std::vector<VideoFile> videos;
 
@@ -113,7 +137,9 @@ std::vector<VideoFile> StorageManager::listVideos() {
             int slash = fullPath.lastIndexOf('/');
             String fname = (slash >= 0) ? fullPath.substring(slash + 1) : fullPath;
 
-            if (fname.endsWith(".avi") || fname.endsWith(".AVI")) {
+            if (fname.endsWith(".avi") || fname.endsWith(".AVI") ||
+                fname.endsWith(".jpg") || fname.endsWith(".JPG") ||
+                fname.endsWith(".jpeg") || fname.endsWith(".JPEG")) {
                 VideoFile vf;
                 vf.name    = fname;
                 vf.size    = f.size();
@@ -134,10 +160,12 @@ std::vector<VideoFile> StorageManager::listVideos() {
 }
 
 bool StorageManager::deleteVideo(const char* filename) {
-    // Bestandsnaam kan met of zonder pad binnenkomen
     String path = String(filename);
     if (!path.startsWith("/")) {
+        if (!isSafeMediaName(path)) return false;
         path = String(VIDEO_DIR) + "/" + path;
+    } else {
+        if (!path.startsWith(String(VIDEO_DIR) + "/")) return false;
     }
     if (SD_MMC.exists(path.c_str())) {
         return SD_MMC.remove(path.c_str());
@@ -148,7 +176,10 @@ bool StorageManager::deleteVideo(const char* filename) {
 bool StorageManager::videoExists(const char* filename) {
     String path = String(filename);
     if (!path.startsWith("/")) {
+        if (!isSafeMediaName(path)) return false;
         path = String(VIDEO_DIR) + "/" + path;
+    } else if (!path.startsWith(String(VIDEO_DIR) + "/")) {
+        return false;
     }
     return SD_MMC.exists(path.c_str());
 }

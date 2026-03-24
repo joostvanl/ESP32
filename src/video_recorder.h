@@ -8,7 +8,7 @@ public:
     VideoRecorder();
     ~VideoRecorder();
 
-    bool begin(const char* filename);
+    bool begin(const char* filename, uint32_t frameWidth, uint32_t frameHeight);
     bool writeFrame(const uint8_t* data, size_t len);
     bool finish();
 

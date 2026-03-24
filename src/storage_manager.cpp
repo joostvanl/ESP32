@@ -160,16 +160,16 @@ std::vector<VideoFile> StorageManager::listVideos() {
         return true;
     };
 
-    std::sort(videos.begin(), videos.end(), [&sortKey](const VideoFile& a, const VideoFile& b) {
+    std::sort(videos.begin(), videos.end(), [&sortKey](const VideoFile& a, const VideoFile& b) -> bool {
         String ka, kb;
         bool okA = sortKey(a.name, ka);
         bool okB = sortKey(b.name, kb);
         if (okA && okB) {
-            if (ka != kb) return ka > kb;
-            return a.name > b.name;
+            if (ka != kb) return static_cast<bool>(ka > kb);
+            return static_cast<bool>(a.name > b.name);
         }
         if (okA != okB) return okA;
-        return a.name > b.name;
+        return static_cast<bool>(a.name > b.name);
     });
 
     return videos;

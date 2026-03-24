@@ -55,7 +55,7 @@ static const char HTML_DASHBOARD[] PROGMEM = R"rawhtml(
   .thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block;opacity:.85;transition:opacity .3s}
   .thumb-wrap img:hover{opacity:1}
   .thumb-overlay{position:absolute;bottom:0;left:0;right:0;padding:.3rem .5rem;background:linear-gradient(transparent,rgba(0,0,0,.7));font-size:.65rem;color:rgba(255,255,255,.8);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .thumb-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:.8rem}
+  .thumb-card > .thumb-empty{display:flex;align-items:center;justify-content:center;width:100%;aspect-ratio:4/3;background:#000;color:var(--muted);font-size:.8rem}
   .thumb-actions{padding:.4rem .75rem .6rem;display:flex;gap:.4rem}
   .dl-toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(150%);opacity:0;transition:transform .35s ease,opacity .35s ease;z-index:9999;max-width:min(22rem,calc(100% - 2rem));padding:.85rem 1.25rem;background:var(--card);border:1px solid var(--accent2);border-radius:.5rem;box-shadow:0 12px 40px rgba(0,0,0,.45);font-size:.88rem;text-align:center;color:var(--text);pointer-events:none}
   .dl-toast.show{transform:translateX(-50%) translateY(0);opacity:1}
@@ -118,9 +118,8 @@ static const char HTML_DASHBOARD[] PROGMEM = R"rawhtml(
   <h2>Laatste bestand</h2>
   <div class="thumb-card" id="thumbCard">
     <div class="card-label">Meest recente video of foto</div>
-    <div class="thumb-wrap" id="thumbWrap">
-      <div class="thumb-empty" id="thumbEmpty">Nog geen bestanden opgeslagen</div>
-    </div>
+    <div class="thumb-empty" id="thumbEmpty">Nog geen bestanden opgeslagen</div>
+    <div class="thumb-wrap" id="thumbWrap" style="display:none"></div>
     <div class="thumb-actions" id="thumbActions" style="display:none">
       <button type="button" id="thumbDl" class="btn btn-secondary">&#8681; Download</button>
     </div>
@@ -135,6 +134,7 @@ static const char HTML_DASHBOARD[] PROGMEM = R"rawhtml(
 <footer>NestboxCam &mdash; ESP32-CAM &bull; <span id="ipAddr"></span></footer>
 <script>
 var lastVideo = '';
+var lastFileCount = -1;
 function setDlToast(text, autoHideMs){
   var el = document.getElementById('dlToast');
   if(!el) return;
@@ -183,7 +183,7 @@ function doCapture(){
     }).catch(function(){ alert('Netwerkfout'); });
 }
 function fetchStatus(){
-  fetch('/api/status').then(r=>r.json()).then(d=>{
+  fetch('/api/status',{cache:'no-store'}).then(r=>r.json()).then(d=>{
     document.getElementById('camStatus').textContent = d.camera ? 'OK' : 'Fout';
     document.getElementById('camStatus').className = 'card-value ' + (d.camera ? '' : 'warn');
     document.getElementById('freeSpace').textContent = d.free_mb + ' MB';
@@ -204,19 +204,38 @@ function fetchStatus(){
       rb.className = 'idle-badge';
       rb.innerHTML = '<span class="status-dot dot-green"></span>Inactief';
     }
-    if(d.last_video && d.last_video !== lastVideo){
+    var cnt = typeof d.video_count === 'number' ? d.video_count : parseInt(d.video_count, 10) || 0;
+    var fileChanged = d.last_video && (d.last_video !== lastVideo || cnt !== lastFileCount);
+    if(!d.last_video){
+      lastVideo = '';
+      lastFileCount = cnt;
+      clearThumbnail();
+    } else if(fileChanged){
       lastVideo = d.last_video;
+      lastFileCount = cnt;
       updateThumbnail(d.last_video);
     }
   }).catch(()=>{});
 }
+function clearThumbnail(){
+  var empty = document.getElementById('thumbEmpty');
+  var wrap = document.getElementById('thumbWrap');
+  var act = document.getElementById('thumbActions');
+  if(wrap){ wrap.innerHTML = ''; wrap.style.display = 'none'; }
+  if(empty) empty.style.display = 'flex';
+  if(act) act.style.display = 'none';
+}
 function updateThumbnail(name){
   var wrap = document.getElementById('thumbWrap');
+  var empty = document.getElementById('thumbEmpty');
   var enc = encodeURIComponent(name);
-  wrap.innerHTML =
-    '<img src="/thumbnail?file=' + enc + '&t=' + Date.now() + '" alt="thumbnail" onerror="this.style.display=\'none\'">' +
-    '<div class="thumb-overlay">' + name + '</div>';
-  document.getElementById('thumbEmpty').style.display = 'none';
+  if(empty) empty.style.display = 'none';
+  if(wrap){
+    wrap.style.display = 'block';
+    wrap.innerHTML =
+      '<img src="/thumbnail?file=' + enc + '&t=' + Date.now() + '" alt="thumbnail" onerror="this.style.display=\'none\'">' +
+      '<div class="thumb-overlay">' + name + '</div>';
+  }
   document.getElementById('thumbActions').style.display = 'flex';
   var dlBtn = document.getElementById('thumbDl');
   dlBtn.onclick = function(){

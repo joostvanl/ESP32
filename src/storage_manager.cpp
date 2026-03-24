@@ -151,8 +151,24 @@ std::vector<VideoFile> StorageManager::listVideos() {
     }
     dir.close();
 
-    // Sorteer op naam (timestamp) – nieuwste eerst
-    std::sort(videos.begin(), videos.end(), [](const VideoFile& a, const VideoFile& b){
+    // Sorteer op tijdstempel in naam (video_/photo_ + YYYY-MM-DD_HH-MM-SS), nieuwste eerst.
+    // Alleen lexicografisch op volledige naam is fout: 'v' > 'p' dus elke video ging vóór elke foto.
+    auto sortKey = [](const String& name, String& keyOut) -> bool {
+        if (!(name.startsWith("video_") || name.startsWith("photo_"))) return false;
+        if (name.length() < 6 + 19) return false;
+        keyOut = name.substring(6, 25);
+        return true;
+    };
+
+    std::sort(videos.begin(), videos.end(), [&sortKey](const VideoFile& a, const VideoFile& b) {
+        String ka, kb;
+        bool okA = sortKey(a.name, ka);
+        bool okB = sortKey(b.name, kb);
+        if (okA && okB) {
+            if (ka != kb) return ka > kb;
+            return a.name > b.name;
+        }
+        if (okA != okB) return okA;
         return a.name > b.name;
     });
 

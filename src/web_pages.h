@@ -135,6 +135,23 @@ static const char HTML_DASHBOARD[] PROGMEM = R"rawhtml(
 <script>
 var lastVideo = '';
 var lastFileCount = -1;
+function isIosDevice(){
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function isImageFile(name){ return /\.(jpe?g)$/i.test(name); }
+function shareJpegIfPossible(name, blob){
+  try {
+    if (!isImageFile(name) || typeof File === 'undefined') return false;
+    if (!navigator.share || !navigator.canShare) return false;
+    var f = new File([blob], name, { type: 'image/jpeg' });
+    if (navigator.canShare({ files: [f] })) {
+      navigator.share({ files: [f], title: 'NestboxCam' });
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
 function setDlToast(text, autoHideMs){
   var el = document.getElementById('dlToast');
   if(!el) return;
@@ -178,7 +195,12 @@ function setDur(sec){
 function doCapture(){
   fetch('/api/capture').then(function(r){ return r.json(); })
     .then(function(d){
-      if(d.ok){ fetchStatus(); }
+      if(d.ok){
+        fetchStatus();
+        if (isIosDevice()) {
+          setDlToast('Foto opgeslagen. Ga naar Galerij → downloadknop bij de JPEG → lang indrukken om in Foto’s te bewaren.', 7000);
+        }
+      }
       else alert(d.error || 'Foto mislukt');
     }).catch(function(){ alert('Netwerkfout'); });
 }
@@ -239,12 +261,24 @@ function updateThumbnail(name){
   document.getElementById('thumbActions').style.display = 'flex';
   var dlBtn = document.getElementById('thumbDl');
   dlBtn.onclick = function(){
+    if (isImageFile(name) && isIosDevice()) {
+      setDlToast('Foto openen…', 2000);
+      window.open('/download?file=' + enc, '_blank');
+      setTimeout(function(){
+        setDlToast('Houd de foto ingedrukt → Bewaar naar Foto’s (of deelknop).', 6500);
+      }, 400);
+      return;
+    }
     setDlToast('Bestand wordt nu gedownload, een ogenblik.');
     fetch('/download?file=' + enc).then(function(r){
       if(!r.ok) throw new Error('http');
       return r.blob();
     })
       .then(function(blob){
+        if (shareJpegIfPossible(name, blob)) {
+          setDlToast('Kies “Bewaar afbeelding” of sla op in Foto’s.', 5500);
+          return;
+        }
         setDlToast('Download gestart — controleer je downloadmap.', 4500);
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -428,6 +462,9 @@ static const char HTML_VIDEOS[] PROGMEM = R"rawhtml(
     <span><span class="si-label">Totaal:</span><span id="siTotal">—</span></span>
     <span><span class="si-label">Aantal:</span><span id="siCount">—</span></span>
   </div>
+  <div id="iosVideoHint" style="display:none;font-size:.82rem;color:var(--muted);margin-bottom:.75rem;padding:.65rem .85rem;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.28);border-radius:.5rem;line-height:1.45">
+    <strong>iPhone / iPad:</strong> Safari kan <strong>AVI</strong>-nestvideo niet inline afspelen (beperking iOS). Download het bestand naar <strong>Bestanden</strong> en open met <strong>VLC</strong> (gratis in de App Store). Foto’s zijn gewoon JPEG; tik op download en gebruik “Bewaar afbeelding” of open de foto in een nieuw tabblad (houd ingedrukt → Bewaar naar Foto’s).
+  </div>
   <!-- Selectie-toolbar (verschijnt bij selectie) -->
   <div class="sel-bar" id="selBar">
     <span class="sel-count" id="selCount">0 geselecteerd</span>
@@ -439,6 +476,23 @@ static const char HTML_VIDEOS[] PROGMEM = R"rawhtml(
 </main>
 <script>
 var selected = {};
+function isIosDevice(){
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function isImageFile(name){ return /\.(jpe?g)$/i.test(name); }
+function shareJpegIfPossible(name, blob){
+  try {
+    if (!isImageFile(name) || typeof File === 'undefined') return false;
+    if (!navigator.share || !navigator.canShare) return false;
+    var f = new File([blob], name, { type: 'image/jpeg' });
+    if (navigator.canShare({ files: [f] })) {
+      navigator.share({ files: [f], title: 'NestboxCam' });
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
 function setDlToast(text, autoHideMs){
   var el = document.getElementById('dlToast');
   if(!el) return;
@@ -550,13 +604,29 @@ function loadVideos(){
 
 function downloadVideo(name){
   var enc = encodeURIComponent(name);
-  setDlToast('Bestand wordt nu gedownload, een ogenblik.');
+  if (isImageFile(name) && isIosDevice()) {
+    setDlToast('Foto openen…', 2000);
+    window.open('/download?file=' + enc, '_blank');
+    setTimeout(function(){
+      setDlToast('Houd de foto ingedrukt → Bewaar naar Foto’s.', 6500);
+    }, 400);
+    return;
+  }
+  if (/\.(avi|AVI)$/i.test(name) && isIosDevice()) {
+    setDlToast('iPhone/iPad: daarna Bestanden → openen in VLC.', 5000);
+  } else {
+    setDlToast('Bestand wordt nu gedownload, een ogenblik.');
+  }
   fetch('/download?file=' + enc)
     .then(function(r){
       if(!r.ok) throw new Error('http');
       return r.blob();
     })
     .then(function(blob){
+      if (shareJpegIfPossible(name, blob)) {
+        setDlToast('Kies “Bewaar afbeelding” of sla op in Foto’s.', 5500);
+        return;
+      }
       setDlToast('Download gestart — controleer je downloadmap.', 4500);
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -577,6 +647,10 @@ function delVideo(name){
 }
 
 loadVideos();
+(function(){
+  var h = document.getElementById('iosVideoHint');
+  if (h && isIosDevice()) h.style.display = 'block';
+})();
 </script>
 </body>
 </html>

@@ -149,6 +149,11 @@ De server ondersteunt **Range-requests** (`Accept-Ranges: bytes`, 206 Partial Co
 
 De LED-knop op de live-pagina: bij **HTTP** via poort **81** (zodat die tijdens de stream werkt); bij **HTTPS** via dezelfde verbinding (`/api/led`).
 
+### iPhone en iPad (Safari)
+
+- **Video (`.avi`):** iOS **speelt AVI met MJPEG in Safari niet af**; dat is een bekende beperking, geen keuze van dit project. De camera levert JPEG-frames; die worden in een **AVI-container** opgeslagen. **H.264/MP4** in de firmware zou een zware videocoder op de ESP32 vereisen en past niet op deze architectuur. **Praktisch:** download het bestand naar **Bestanden** (of de Downloads-lijst) en open met **VLC** (gratis) of een andere speler die AVI/MJPEG aankan.
+- **Foto’s (`.jpg`):** Het formaat is **JPEG** — geschikt voor Foto’s. Problemen ontstonden vaak doordat een **gefakete download** (blob + `download`-attribuut) op iOS het album niet goed vult. De webinterface opent JPEG’s op iPhone/iPad daarom in een **nieuw tabblad** en gebruikt waar mogelijk het **deelmenu** (bewaar afbeelding). **HEIC** wordt niet op de camera geproduceerd; dat zou extra conversie kosten zonder voordeel voor deze toepassing.
+
 ---
 
 ## Seriële logging (debuggen)
